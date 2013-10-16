@@ -1,0 +1,769 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+		]
+	},
+	"buffers":
+	[
+		{
+			"contents": "/*\n * router.c (GINI router)\n */\n\n//#include <mcheck.h>\n#include <slack/std.h>\n#include <slack/err.h>\n#include <slack/prog.h>\n#include <sys/types.h>\n#include <sys/stat.h>\n#include <fcntl.h>\n#include <unistd.h>\n#include <signal.h>\n#include <errno.h>\n#include \"packetcore.h\"\n#include \"classifier.h\"\n#include \"filter.h\"\n#include <pthread.h>\n\nrouter_config rconfig = {.router_name=NULL, .gini_home=NULL, .cli_flag=0, .config_file=NULL, .config_dir=NULL, .ghandler=0, .clihandler= 0, .scheduler=0, .worker=0, .schedcycle=10000};\npktcore_t *pcore;\nclasslist_t *classifier;\nfiltertab_t *filter;\n\n\nOption grouter_optab[] =\n{\n	{\n		\"interactive\", 'i', \"0 or 1\", \"CLI on for interactive mode (daemon otherwise)\",\n		required_argument, OPT_INTEGER, OPT_VARIABLE, &(rconfig.cli_flag)\n	},\n	{\n		\"config\", 'c', \"path\", \"Specify the configuration file\",\n		optional_argument, OPT_STRING, OPT_VARIABLE, &(rconfig.config_file)\n	},\n	{\n		\"confpath\", 'p', \"path\", \"Specify directory with configuration files\",\n		required_argument, OPT_STRING, OPT_VARIABLE, &(rconfig.config_dir)\n	},\n	{\n		NULL, '\\0', NULL, NULL, 0, 0, 0, NULL\n	}\n};\n\nOptions options[1] = {{ prog_options_table, grouter_optab }};\n\nvoid setupProgram(int ac, char *av[]);\nvoid removePIDFile();\nint makePIDFile(char *rname, char rpath[]);\nvoid shutdownRouter();\nint isPIDAlive(int pid);\n\n\nint main(int ac, char *av[])\n{\n	char rpath[MAX_NAME_LEN];\n	int status, *jstatus;\n	simplequeue_t *outputQ, *workQ, *qtoa;\n\n	// setup the program properties\n	setupProgram(ac, av);\n	// creates a PID file under router_name.pid in the current directory\n	status = makePIDFile(rconfig.router_name, rpath);\n	// shutdown the router on receiving SIGUSR1 or SIGUSR2\n	redefineSignalHandler(SIGUSR1, shutdownRouter);\n	redefineSignalHandler(SIGUSR2, shutdownRouter);\n\n	//create the output and work queues\n	outputQ = createSimpleQueue(\"outputQueue\", INFINITE_Q_SIZE, 0, 1);\n	workQ = createSimpleQueue(\"work Queue\", INFINITE_Q_SIZE, 0, 1);\n\n	//GNET is the one that writes outgoing packets\n	//rconfig is used for passing configuration parameters within the GINI router.\n	GNETInit(&(rconfig.ghandler), rconfig.config_dir, rconfig.router_name, outputQ);\n	ARPInit();\n	IPInit();\n\n	classifier = createClassifier();\n	filter = createFilter(classifier, 0);\n\n	//collection of packet queues eg.  output, work, and queues created by the classifier\n	pcore = createPacketCore(rconfig.router_name, outputQ, workQ);\n\n	// add a default Queue.. the createClassifier has already added a rule with \"default\" tag\n	// char *qname, char *dqisc, double qweight, double delay_us, int nslots);\n	addPktCoreQueue(pcore, \"default\", \"taildrop\", 1.0, 2.0, 0);\n	rconfig.scheduler = PktCoreSchedulerInit(pcore); //adding queue\n	rconfig.worker = PktCoreWorkerInit(pcore);\n\n	infoInit(rconfig.config_dir, rconfig.router_name);\n	addTarget(\"Output Queue\", outputQ);\n	qtoa = getCoreQueue(pcore, \"default\");\n	if (qtoa != NULL)\n		addTarget(\"Default Queue\", qtoa);\n	else\n		printf(\"Error .. found null queue for default\\n\");\n\n	// start the CLI..\n	CLIInit(&(rconfig));\n\n\n	wait4thread(rconfig.scheduler);\n	wait4thread(rconfig.worker);\n	wait4thread(rconfig.ghandler);\n}\n\n\nvoid wait4thread(pthread_t threadid)\n{\n	int *jstatus;\n	if (threadid > 0)\n		pthread_join(threadid, (void **)&jstatus);\n}\n\n\nvoid shutdownRouter()\n{\n	verbose(1, \"[main]:: shutting down the GNET handler...\");\n	GNETHalt(rconfig.ghandler);\n	verbose(1, \"[main]:: shutting down the packet core... \"); fflush(stdout);\n	pthread_cancel(rconfig.scheduler);\n	pthread_cancel(rconfig.worker);\n	verbose(1, \"[main]:: shutting down the CLI handler.. \");\n	pthread_cancel(rconfig.clihandler);\n\n	// we should cancel CLI thread too??\n	verbose(1, \"[main]:: removing the PID files... \");\n	removePIDFile();\n}\n\n\nvoid setupProgram(int ac, char *av[])\n{\n	int indx;\n\n	prog_init();\n	prog_set_syntax(\"[options] router_name\");\n	prog_set_options(options);\n	prog_set_version(\"2.1\");\n	prog_set_date(\"20091024\");\n	prog_set_author(\"Muthucumaru Maheswaran <maheswar@cs.mcgill.ca>\");\n	prog_set_contact(prog_author());\n	prog_set_url(\"http://www.cs.mcgill.ca/~anrl/gini/\");\n	prog_set_desc(\"GINI router provides a user-space IP router for teaching and learning purposes.\");\n\n	prog_set_verbosity_level(1);\n\n	indx = prog_opt_process(ac, av);\n\n	if (indx < ac)\n		rconfig.router_name = strdup(av[indx]);\n\n	if (rconfig.router_name == NULL)\n	{\n		prog_usage_msg(\"\\n[setupProgram]:: Router name missing.. \\n\\n\");\n		exit(1);\n	}\n	prog_set_name(rconfig.router_name);\n	rconfig.gini_home = getenv(\"GINI_HOME\");\n	if (rconfig.gini_home == NULL)\n	{\n		verbose(2, \"\\n[setupProgram]:: Environment variable GINI_HOME is not set..\\n\\n\");\n		exit(1);\n	}\n\n}\n\n\n\n\nint makePIDFile(char *rname, char rpath[])\n{\n	FILE *fp;\n	int pid;\n\n	// initialize the config directory..\n	if (rconfig.config_dir == NULL)\n		rconfig.config_dir = strdup(\".\");\n	sprintf(rpath, \"%s/%s.pid\", rconfig.config_dir, rname);\n\n	if ((fp = fopen(rpath, \"r\")) != NULL)\n	{\n		// another router could be running or left without cleanup!!\n		fscanf(fp, \"%d\", &pid);\n		if (isPIDAlive(pid))\n		{\n			fatal(\"[makePIDFile]:: Another router is still running under: %s \\n\", rpath);\n			exit(1);\n		} else\n		{\n			remove(rpath);\n		}\n	}\n\n\n	if ((fp = fopen(rpath, \"w\")) == NULL)\n	{\n		fatal(\"[makePIDFile]:: ERROR!! unable to create PID file...%s\", rpath);\n		exit(1);\n	}\n\n	fprintf(fp, \"%d\\n\", getpid());\n	fclose(fp);\n\n	return TRUE;\n}\n\n\nvoid removePIDFile()\n{\n	char rpath[MAX_NAME_LEN];\n\n	sprintf(rpath, \"%s/%s.pid\", rconfig.config_dir, prog_name());\n	remove(rpath);\n}\n\n\nint isPIDAlive(int pid)\n{\n	if (kill(pid, 0) < 0)\n	{\n		if (errno == ESRCH)\n			return FALSE;\n\n		// this return should never happen..\n		return FALSE;\n	}\n	return TRUE;\n}\n\n\n",
+			"file": "src/grouter/grouter.c",
+			"file_size": 5652,
+			"file_write_time": 1381447667000000,
+			"settings":
+			{
+				"buffer_size": 5652,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "src/grouter/gnet.c",
+			"settings":
+			{
+				"buffer_size": 19966,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "src/grouter/ip.c",
+			"settings":
+			{
+				"buffer_size": 15245,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"contents": "/*\n * icmp.c (collection of functions that implement the ICMP)\n * AUTHOR: Original version by Weiling Xu\n *         Revised by Muthucumaru Maheswaran\n * DATE:   Last revised on June 22, 2008\n *\n */\n\n\n#include \"protocols.h\"\n#include \"icmp.h\"\n#include \"ip.h\"\n#include \"message.h\"\n#include \"grouter.h\"\n#include <slack/err.h>\n#include <netinet/in.h>\n#include <sys/time.h>\n#include <stdio.h>\n#include <string.h>\n\n// state information on outstanding ping..\npingstat_t pstat;\n\n/*\n* Lineker: Use this as example to implement UDP.\n*/\n\n/*\n * *** TODO: *** complete this function by implemeting the missing handlers\n * Only ICMP Echo is processed at this point.. we need to process other ICMP packets\n * as well. This is somewhat urgent!!\n */\nvoid ICMPProcessPacket(gpacket_t *in_pkt)\n{\n	ip_packet_t *ip_pkt = (ip_packet_t *)in_pkt->data.data;\n	int iphdrlen = ip_pkt->ip_hdr_len *4;\n	icmphdr_t *icmphdr = (icmphdr_t *)((uchar *)ip_pkt + iphdrlen);\n\n	switch (icmphdr->type)\n	{\n	case ICMP_ECHO_REQUEST:\n		verbose(2, \"[ICMPProcessPacket]:: ICMP processing for ECHO request\");\n		ICMPProcessEchoRequest(in_pkt);\n		break;\n\n	case ICMP_ECHO_REPLY:\n		verbose(2, \"[ICMPProcessPacket]:: ICMP processing for ECHO reply\");\n		ICMPProcessEchoReply(in_pkt);\n		break;\n\n	case ICMP_REDIRECT:\n	case ICMP_SOURCE_QUENCH:\n	case ICMP_TIMESTAMP:\n	case ICMP_TIMESTAMPREPLY:\n	case ICMP_INFO_REQUEST:\n	case ICMP_INFO_REPLY:\n		verbose(2, \"[ICMPProcessPacket]:: ICMP processing for type %d not implemented \", icmphdr->type);\n		break;\n	}\n}\n\n\n\n/*\n * send a ICMP echo request packet to the specified host/router\n * this routine does the following: send ICMP requests to the IP\n * with the destination address stored in icmp_cmd.ip_addr.\n * Sleeps for a while and tries another ping (until the number of tries).\n * If a ping is already active it ignores the current request.\n * No buffered ping requests!\n */\nvoid ICMPDoPing(uchar *ipaddr, int pkt_size, int retries)\n{\n	static int ping_active = 0;\n	int i;\n	char tmpbuf[64];\n\n	// initialize the ping statistics structure\n	pstat.tmin = LARGE_REAL_NUMBER;\n	pstat.tmax = SMALL_REAL_NUMBER;\n	pstat.tsum = 0;\n	pstat.ntransmitted = 0;\n	pstat.nreceived = 0;\n\n	if (ping_active == 0)\n	{\n		printf(\"Pinging IP Address [%s]\\n\", IP2Dot(tmpbuf, ipaddr));\n		ping_active = 1;\n		\n		for(i=0; i < retries; i++)\n			ICMPSendPingPacket(ipaddr, pkt_size, i);\n\n		ping_active = 0;\n	}\n\n}\n\n\n\nvoid ICMPSendPingPacket(uchar *dst_ip, int size, int seq)\n{\n	gpacket_t *out_pkt = (gpacket_t *) malloc(sizeof(gpacket_t));\n	ip_packet_t *ipkt = (ip_packet_t *)(out_pkt->data.data);\n	ipkt->ip_hdr_len = 5;                                  // no IP header options!!\n	icmphdr_t *icmphdr = (icmphdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4);\n	ushort cksum;\n	struct timeval *tp = (struct timeval *)((uchar *)icmphdr + 8);\n	struct timezone tz;\n	uchar *dataptr;\n	int i;\n	char tmpbuf[64];\n\n	pstat.ntransmitted++;\n\n	icmphdr->type = ICMP_ECHO_REQUEST;\n	icmphdr->code = 0;\n	icmphdr->checksum = 0;\n	icmphdr->un.echo.id = getpid() & 0xFFFF;\n	icmphdr->un.echo.sequence = seq;\n	gettimeofday(tp, &tz);\n\n	dataptr = ((uchar *)icmphdr + 8 +  sizeof(struct timeval));\n	// pad data...\n	for (i = 8; i < size; i++)\n		*dataptr++ = i;\n\n	cksum = checksum((uchar *)icmphdr, size/2);  // size = payload (given) + icmp_header\n	icmphdr->checksum = htons(cksum);\n\n	verbose(2, \"[sendPingPacket]:: Sending... ICMP ping to  %s\", IP2Dot(tmpbuf, dst_ip));\n\n	// send the message to the IP routine for further processing\n	// the IP should create new header .. provide needed information from here.\n	// tag the message as new packet\n	// IPOutgoingPacket(/context, packet, IPaddr, size, newflag, source)\n	IPOutgoingPacket(out_pkt, dst_ip, size, 1, ICMP_PROTOCOL);\n}\n\n\n\n\n/*\n * Send TTL expired message.\n */\nvoid ICMPProcessTTLExpired(gpacket_t *in_pkt)\n{\n	ip_packet_t *ipkt = (ip_packet_t *)in_pkt->data.data;\n	int iphdrlen = ipkt->ip_hdr_len *4;\n	icmphdr_t *icmphdr = (icmphdr_t *)((uchar *)ipkt + iphdrlen);\n	ushort cksum;\n	char tmpbuf[MAX_TMPBUF_LEN];\n	int iprevlen = iphdrlen + 8;  // IP header + 64 bits\n	uchar prevbytes[MAX_IPREVLENGTH_ICMP];\n\n	memcpy(prevbytes, (uchar *)ipkt, iprevlen);\n\n	/*\n	 * form an ICMP TTL expired message and fill in ICMP\n	 * header ...\n	 */\n	icmphdr->type = ICMP_TTL_EXPIRED;\n	icmphdr->code = 0; \n	icmphdr->checksum = 0;\n	bzero((void *)&(icmphdr->un), sizeof(icmphdr->un));\n	memcpy(((uchar *)icmphdr + 8), prevbytes, iprevlen);    /* ip header + 64 bits of original pkt */\n	cksum = checksum((uchar *)icmphdr, (8 + iprevlen)/2 );\n	icmphdr->checksum = htons(cksum);\n\n	verbose(2, \"[ICMPProcessTTLExpired]:: Sending... ICMP TTL expired message \");\n	printf(\"Checksum at ICMP routine (TTL expired):  %x\\n\", cksum);\n\n	// send the message back to the IP module for further processing ..\n	// set the messsage as REPLY_PACKET\n	IPOutgoingPacket(in_pkt, gNtohl(tmpbuf, ipkt->ip_src), 8+iprevlen, 1, ICMP_PROTOCOL);\n}\n\n\n\n/*\n * send a PING reply in response to the incoming REQUEST\n */\nvoid ICMPProcessEchoRequest(gpacket_t *in_pkt)\n{\n	ip_packet_t *ipkt = (ip_packet_t *)in_pkt->data.data;\n	int iphdrlen = ipkt->ip_hdr_len *4;\n	icmphdr_t *icmphdr = (icmphdr_t *)((uchar *)ipkt + iphdrlen);\n	uchar *icmppkt_b = (uchar *)icmphdr;\n\n	ushort cksum;\n	int ilen = ntohs(ipkt->ip_pkt_len) - iphdrlen;\n\n\n	icmphdr->type = ICMP_ECHO_REPLY;\n	icmphdr->checksum = 0;\n	if (IS_ODD(ilen))\n	{\n		// pad with a zero byte.. IP packet length remains the same \n		icmppkt_b[ilen] = 0x0;\n		ilen++;\n	}\n	cksum = checksum(icmppkt_b, (ilen/2));\n	icmphdr->checksum = htons(cksum);\n	\n	// send the message back to the IP routine for further processing ..\n	// set the messsage as REPLY_PACKET..\n	// destination IP and size need not be set. they can be obtained from the original packet\n	\n	IPOutgoingPacket(in_pkt, NULL, 0, 0, ICMP_PROTOCOL);\n}\n\n\n\n/*\n * process incoming ECHO REPLY .. by printing it...\n * ASSUMPTION: only one ping is active -- this is true because the\n * router is not multitasking from the CLI -- only one ping command can be\n * active at a given time. the reply should correspond to the active request.\n */\nvoid ICMPProcessEchoReply(gpacket_t *in_pkt)\n{\n	ip_packet_t *ipkt = (ip_packet_t *)in_pkt->data.data;\n	int iphdrlen = ipkt->ip_hdr_len *4;\n	icmphdr_t *icmphdr = (icmphdr_t *)((uchar *)ipkt + iphdrlen);\n	uchar *icmppkt_b = (uchar *)icmphdr;\n\n	struct timeval tv;\n	struct timezone tz;\n	char tmpbuf[MAX_TMPBUF_LEN];\n	double elapsed_time;\n\n	if (icmphdr->type == ICMP_ECHO_REPLY)\n	{\n		pstat.nreceived++;\n\n		gettimeofday(&tv, &tz);\n		elapsed_time = subTimeVal(&tv, (struct timeval *)(icmppkt_b + 8));\n		printf(\"%d bytes from %s: icmp_seq=%d ttl=%d time=%6.3f ms\\n\", \n		       (ntohs(ipkt->ip_pkt_len) - iphdrlen - 8),\n		       IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ipkt->ip_src)), \n		       ntohs(icmphdr->un.echo.sequence), ipkt->ip_ttl, elapsed_time);\n	}\n}\n\n\n/*\n * send an ICMP Redirect\n */\nvoid ICMPProcessRedirect(gpacket_t *in_pkt, uchar *gw_addr)\n{\n	ip_packet_t *ipkt = (ip_packet_t *)in_pkt->data.data;\n	int iphdrlen = ipkt->ip_hdr_len * 4;\n	icmphdr_t *icmphdr = (icmphdr_t *)((uchar *)ipkt + iphdrlen);\n	int iprevlen = iphdrlen + 8;  // IP header + 64 bits\n	ushort cksum;\n	char tmpbuf[MAX_TMPBUF_LEN];\n	uchar prevbytes[MAX_IPREVLENGTH_ICMP];\n	memcpy(prevbytes, (uchar *)ipkt, iprevlen);\n\n\n	// form an ICMP Redirect message\n	icmphdr->type = ICMP_REDIRECT;\n	icmphdr->code = 0; \n	icmphdr->checksum = 0;\n	COPY_IP((char *)&icmphdr->un.gateway, gw_addr);\n	memcpy(((uchar *)icmphdr + 8), prevbytes, iprevlen);    /* ip header + 64 bits of original pkt */\n	cksum = checksum((uchar *)icmphdr, (8 + iprevlen)/2 );\n	icmphdr->checksum = htons(cksum);\n\n	verbose(2, \"[ICMPProcessRedirect]:: Sending... ICMP Redirect message \");\n\n	// send the message back to the IP routine for further processing ..\n	// set the messsage as REPLY_PACKET\n	IPOutgoingPacket(in_pkt, gNtohl(tmpbuf, ipkt->ip_src), (8 + iprevlen), 0, ICMP_PROTOCOL);\n}\n\n\n\n\n/*\n * send a Fragmentation needed from previous router\n */\nvoid ICMPProcessFragNeeded(gpacket_t *in_pkt, int interface_mtu)\n{\n	ip_packet_t *ipkt = (ip_packet_t *)in_pkt->data.data;\n	int iphdrlen = ipkt->ip_hdr_len *4;\n	icmphdr_t *icmphdr = (icmphdr_t *)((uchar *)ipkt + iphdrlen);\n	int iprevlen = iphdrlen + 8;  // IP header + 64 bits\n	ushort cksum;\n	char tmpbuf[MAX_TMPBUF_LEN];\n	uchar prevbytes[MAX_IPREVLENGTH_ICMP];\n	memcpy(prevbytes, (uchar *)ipkt, iprevlen);            // save OLD portions of IP packet\n\n	// form an ICMP Fragmentation needed message\n	icmphdr->type = ICMP_DEST_UNREACH;\n	icmphdr->code = ICMP_FRAG_NEEDED; \n	icmphdr->checksum = 0;\n	icmphdr->un.frag.mtu = interface_mtu;\n	memcpy(((uchar *)icmphdr + 8), prevbytes, iprevlen);    // OLD ip header + 64 bits of original pkt \n	cksum = checksum((uchar *)icmphdr, (8 + iprevlen)/2 );\n	icmphdr->checksum = htons(cksum);\n\n	verbose(2, \"[processFragNeeded]:: Sending... ICMP Frag needed message \");\n\n	// send the message back to the IP module for further processing ..\n	// set the messsage as REPLY_PACKET\n	IPOutgoingPacket(in_pkt, gNtohl(tmpbuf, ipkt->ip_src), (8 + iprevlen), 0, ICMP_PROTOCOL);\n}\n",
+			"file": "/home/test/gini/backend/src/grouter/icmp.c",
+			"file_size": 8958,
+			"file_write_time": 1379425106000000,
+			"settings":
+			{
+				"buffer_size": 9014,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"contents": "Searching 25 files for \"ICMPProcessPacket\"\n\n/home/test/gini/backend/src/grouter/icmp.c:\n   27   * as well. This is somewhat urgent!!\n   28   */\n   29: void ICMPProcessPacket(gpacket_t *in_pkt)\n   30  {\n   31  	ip_packet_t *ip_pkt = (ip_packet_t *)in_pkt->data.data;\n   ..\n   36  	{\n   37  	case ICMP_ECHO_REQUEST:\n   38: 		verbose(2, \"[ICMPProcessPacket]:: ICMP processing for ECHO request\");\n   39  		ICMPProcessEchoRequest(in_pkt);\n   40  		break;\n   41  \n   42  	case ICMP_ECHO_REPLY:\n   43: 		verbose(2, \"[ICMPProcessPacket]:: ICMP processing for ECHO reply\");\n   44  		ICMPProcessEchoReply(in_pkt);\n   45  		break;\n   ..\n   51  	case ICMP_INFO_REQUEST:\n   52  	case ICMP_INFO_REPLY:\n   53: 		verbose(2, \"[ICMPProcessPacket]:: ICMP processing for type %d not implemented \", icmphdr->type);\n   54  		break;\n   55  	}\n\n/home/test/gini/backend/src/grouter/ip.c:\n  307  \n  308  		if (ip_pkt->ip_prot == ICMP_PROTOCOL) {\n  309: 			ICMPProcessPacket(in_pkt);\n  310  		  return EXIT_SUCCESS;\n  311      }\n\n5 matches across 2 files\n\n\nSearching 25 files for \"createSimpleQueue\"\n\n/home/test/gini/backend/src/grouter/console.c:\n  132   	} \n  133  \n  134: 	consoleq = createSimpleQueue(\"console queue\", 256, 0, 1);\n  135   	if ((fd = fifo_open(consolepath, S_IRUSR | S_IWUSR | S_IWGRP | S_IWOTH, 1, &consoleid)) == -1) \n  136   	{ \n\n/home/test/gini/backend/src/grouter/grouter.c:\n   66  	redefineSignalHandler(SIGUSR2, shutdownRouter);\n   67  \n   68: 	outputQ = createSimpleQueue(\"outputQueue\", INFINITE_Q_SIZE, 0, 1);\n   69: 	workQ = createSimpleQueue(\"work Queue\", INFINITE_Q_SIZE, 0, 1);\n   70  \n   71  	GNETInit(&(rconfig.ghandler), rconfig.config_dir, rconfig.router_name, outputQ);\n\n/home/test/gini/backend/src/grouter/packetcore.c:\n  123  \n  124  \n  125: 	if ((pktq = createSimpleQueue(qname, pcore->maxqsize, 0, 0)) == NULL)\n  126  	{\n  127  		error(\"[addPktCoreQueue]:: packet queue creation failed.. \");\n\n/home/test/gini/backend/src/grouter/simplequeue.c:\n   21  // Similarly, if blockonread is true, a read on an empty queue blocks.\n   22  // For unbounded queue, blockonwrite is meaningless.\n   23: simplequeue_t *createSimpleQueue(char *name, int maxsize, int blockonwrite,\n   24  				 int blockonread)\n   25  {\n   ..\n   28  	if ((msgqueue = (simplequeue_t *) malloc(sizeof(simplequeue_t))) == NULL)\n   29  	{\n   30: 		fatal(\"[createSimpleQueue]:: Could not allocate memory for message queue structure\");\n   31  		return NULL;\n   32  	}\n   ..\n   46  	if (!(msgqueue->queue = list_create(NULL)))\n   47  	{\n   48: 		fatal(\"[createSimpleQueue]:: Could not create the message list..\");\n   49  		return NULL;\n   50  	}\n   51  \n   52: 	verbose(6, \"[createSimpleQueue]:: Queue created -- name %s\", name);\n   53  	return msgqueue;\n   54  }\n\n8 matches across 4 files\n\n\nSearching 25 files for \"gNtohl\"\n\n/home/test/gini/backend/src/grouter/arp.c:\n  123  \n  124  	verbose(2, \"[ARPProcess]:: adding sender of received packet to ARP table\");\n  125: 	ARPAddEntry(gNtohl((uchar *)tmpbuf, apkt->src_ip_addr), apkt->src_hw_addr);\n  126  \n  127  	// Check it's actually destined to us,if not throw packet\n  ...\n  129  	{\n  130  		verbose(2, \"[APRProcess]:: packet has a frame source (after ntohl) %s ...\",\n  131: 		       IP2Dot(tmpbuf, gNtohl((uchar *)tmpbuf, pkt->frame.src_ip_addr)));\n  132  \n  133  		verbose(2, \"[APRProcess]:: packet destined for %s, dropping\",\n  134: 		       IP2Dot(tmpbuf, gNtohl((uchar *)tmpbuf, apkt->dst_ip_addr)));\n  135  		return;\n  136  	}\n  ...\n  155  		COPY_MAC(pkt->data.header.dst, pkt->data.header.src);\n  156  		COPY_MAC(pkt->data.header.src,  pkt->frame.src_hw_addr);\n  157: 		COPY_IP(pkt->frame.nxth_ip_addr, gNtohl((uchar *)tmpbuf, apkt->dst_ip_addr));\n  158  		pkt->frame.arp_valid = TRUE;\n  159  \n  ...\n  166  		// Flush buffer of any packets waiting for the incoming ARP..\n  167  		verbose(2, \"[ARPProcess]:: packet was ARP REPLY... \");\n  168: 		ARPFlushBuffer(gNtohl((uchar *)tmpbuf, apkt->src_ip_addr), apkt->src_hw_addr);\n  169  		verbose(2, \"[ARPProcess]:: flushed the ARP buffer ... \");\n  170  	}\n\n/home/test/gini/backend/src/grouter/icmp.c:\n  172  	// send the message back to the IP module for further processing ..\n  173  	// set the messsage as REPLY_PACKET\n  174: 	IPOutgoingPacket(in_pkt, gNtohl(tmpbuf, ipkt->ip_src), 8+iprevlen, 1, ICMP_PROTOCOL);\n  175  }\n  176  \n  ...\n  237  		printf(\"%d bytes from %s: icmp_seq=%d ttl=%d time=%6.3f ms\\n\", \n  238  		       (ntohs(ipkt->ip_pkt_len) - iphdrlen - 8),\n  239: 		       IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ipkt->ip_src)), \n  240  		       ntohs(icmphdr->un.echo.sequence), ipkt->ip_ttl, elapsed_time);\n  241  	}\n  ...\n  271  	// send the message back to the IP routine for further processing ..\n  272  	// set the messsage as REPLY_PACKET\n  273: 	IPOutgoingPacket(in_pkt, gNtohl(tmpbuf, ipkt->ip_src), (8 + iprevlen), 0, ICMP_PROTOCOL);\n  274  }\n  275  \n  ...\n  304  	// send the message back to the IP module for further processing ..\n  305  	// set the messsage as REPLY_PACKET\n  306: 	IPOutgoingPacket(in_pkt, gNtohl(tmpbuf, ipkt->ip_src), (8 + iprevlen), 0, ICMP_PROTOCOL);\n  307  }\n  308  \n\n/home/test/gini/backend/src/grouter/ip.c:\n   50  		verbose(2, \"[IPIncomingPacket]:: got IP packet destined to this router\");\n   51  		IPProcessMyPacket(in_pkt);\n   52: 	} else if (COMPARE_IP(gNtohl(tmpbuf, ip_pkt->ip_dst), bcast_ip) == 0)\n   53  	{\n   54  		// TODO: rudimentary 'broadcast IP address' check\n   55  		verbose(2, \"[IPIncomingPacket]:: not repeat broadcast (final destination %s), packet thrown\",\n   56: 		       IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_dst)));\n   57  		IPProcessBcastPacket(in_pkt);\n   58  	} else\n   ..\n   79  	uchar pkt_ip[4];\n   80  \n   81: 	COPY_IP(pkt_ip, gNtohl(tmpbuf, ip_pkt->ip_dst));\n   82  	verbose(2, \"[IPCheckPacket4Me]:: looking for IP %s \", IP2Dot(tmpbuf, pkt_ip));\n   83  	if ((count = findAllInterfaceIPs(MTU_tbl, iface_ip)) > 0)\n   ..\n  136  	// find the route... if it does not exist, should we send a\n  137  	// ICMP network/host unreachable message -- CHECK??\n  138: 	if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  139  			   in_pkt->frame.nxth_ip_addr,\n  140  			   &(in_pkt->frame.dst_interface)) == EXIT_FAILURE)\n  ...\n  167  	case FRAGS_ERROR:\n  168  		verbose(2, \"[IPProcessForwardingPacket]:: unreachable on packet from %s\",\n  169: 			IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_src)));\n  170  		ICMPProcessFragNeeded(in_pkt);\n  171  		break;\n  ...\n  208  	{\n  209  		verbose(2, \"[processIPErrors]:: TTL expired on packet from %s\",\n  210: 		       IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_src)));\n  211  \n  212  		ICMPProcessTTLExpired(in_pkt);\n  ...\n  266  	// check for redirect condition and send an ICMP back... let the current packet\n  267  	// go as well (check the specification??)\n  268: 	if (isInSameNetwork(gNtohl(tmpbuf, ip_pkt->ip_src), in_pkt->frame.nxth_ip_addr) == EXIT_SUCCESS)\n  269  	{\n  270  		verbose(2, \"[processIPErrors]:: redirect message sent on packet from %s\",\n  271: 		       IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_src)));\n  272  \n  273  		cp_pkt = duplicatePacket(in_pkt);\n  ...\n  363  		// find the nexthop and interface and fill them in the \"meta\" frame\n  364  		// NOTE: the packet itself is not modified by this lookup!\n  365: 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  366  				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)\n  367  				   return EXIT_FAILURE;\n  ...\n  384  		// find the nexthop and interface and fill them in the \"meta\" frame\n  385  		// NOTE: the packet itself is not modified by this lookup!\n  386: 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  387  				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)\n  388  				   return EXIT_FAILURE;\n  ...\n  453  	{\n  454  		verbose(2, \"[IPVerifyPacket]:: packet from %s failed checksum, packet thrown\",\n  455: 		       IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_src)));\n  456  		return EXIT_FAILURE;\n  457  	}\n  ...\n  461  	{\n  462  		verbose(2, \"[IPVerifyPacket]:: from %s failed checksum, packet thrown\",\n  463: 		       IP2Dot(tmpbuf, gNtohl((tmpbuf + 20), ip_pkt->ip_src)));\n  464  		return EXIT_FAILURE;\n  465  	}\n\n/home/test/gini/backend/src/grouter/message.c:\n  152  	printf(\"IP: Protocol       : %d\", ip_pkt->ip_prot);\n  153  	printf(\"IP: Checksum       : 0x%X\\n\", ntohs(ip_pkt->ip_cksum));\n  154: 	printf(\"IP: Source         : %s\", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_src)));\n  155: 	printf(\"IP: Destination    : %s\", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_dst)));\n  156  \n  157  	return ip_pkt->ip_prot;\n  ...\n  172  	printf(\" ARP opcode %x \\n\", ntohs(apkt->arp_opcode));\n  173  	printf(\" ARP src hw addr %s \\n\", MAC2Colon(tmpbuf, apkt->src_hw_addr));\n  174: 	printf(\" ARP src ip addr %s \\n\", IP2Dot(tmpbuf, gNtohl((uchar *)tmpbuf, apkt->src_ip_addr)));\n  175  	printf(\" ARP dst hw addr %s \\n\", MAC2Colon(tmpbuf, apkt->dst_hw_addr));\n  176: 	printf(\" ARP dst ip addr %s \\n\", IP2Dot(tmpbuf, gNtohl((uchar *)tmpbuf, apkt->dst_ip_addr)));\n  177  }\n  178  \n\n/home/test/gini/backend/src/grouter/utils.c:\n  116  \n  117  \n  118: unsigned char *gNtohl(unsigned char tbuf[], unsigned char val[])\n  119  {\n  120  	long inpara, outpara;\n\n26 matches across 5 files\n\n\nSearching 25 files for \"findRouteEntry\"\n\n/home/test/gini/backend/src/grouter/ip.c:\n  136  	// find the route... if it does not exist, should we send a\n  137  	// ICMP network/host unreachable message -- CHECK??\n  138: 	if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  139  			   in_pkt->frame.nxth_ip_addr,\n  140  			   &(in_pkt->frame.dst_interface)) == EXIT_FAILURE)\n  ...\n  363  		// find the nexthop and interface and fill them in the \"meta\" frame\n  364  		// NOTE: the packet itself is not modified by this lookup!\n  365: 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  366  				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)\n  367  				   return EXIT_FAILURE;\n  ...\n  384  		// find the nexthop and interface and fill them in the \"meta\" frame\n  385  		// NOTE: the packet itself is not modified by this lookup!\n  386: 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  387  				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)\n  388  				   return EXIT_FAILURE;\n\n/home/test/gini/backend/src/grouter/routetable.c:\n   33   * Returns NO_ERROR if match found, ERROR if no match found\n   34   */\n   35: int findRouteEntry(route_entry_t route_tbl[], uchar *ip_addr, uchar *nhop, int *ixface)\n   36  {\n   37  	int icount;\n   ..\n   43  	{\n   44  		if (route_tbl[icount].is_empty == TRUE) continue;\n   45: 		verbose(2, \"[findRouteEntry]:: Testing the route entry.. g %s at RT[%d], net %s netmask %s nexthop %s int %d\",\n   46  			       IP2Dot(tmpbuf, ip_addr), icount, IP2Dot(tmpbuf+15, route_tbl[icount].network),\n   47  			       IP2Dot(tmpbuf+30, route_tbl[icount].netmask), IP2Dot(tmpbuf+45, route_tbl[icount].nexthop),\n   ..\n   49  		if (compareIPUsingMask(ip_addr, route_tbl[icount].network, route_tbl[icount].netmask) == 0)\n   50  		{\n   51: 			verbose(2, \"[findRouteEntry]:: Found a route for %s at RT[%d], net %s netmask %s nexthop %s int %d\",\n   52  			       IP2Dot(tmpbuf, ip_addr), icount, IP2Dot(tmpbuf+15, route_tbl[icount].network),\n   53  			       IP2Dot(tmpbuf+30, route_tbl[icount].netmask), IP2Dot(tmpbuf+45, route_tbl[icount].nexthop),\n   ..\n   65  	}\n   66  \n   67: 	verbose(2, \"[findRouteEntry]:: No match for %s in route table\", IP2Dot(tmpbuf, ip_addr));\n   68  	return EXIT_FAILURE;\n   69  }\n\n7 matches across 2 files\n\n\nSearching 25 files for \"findRouteEntry\"\n\n/home/test/gini/backend/src/grouter/ip.c:\n  136  	// find the route... if it does not exist, should we send a\n  137  	// ICMP network/host unreachable message -- CHECK??\n  138: 	if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  139  			   in_pkt->frame.nxth_ip_addr,\n  140  			   &(in_pkt->frame.dst_interface)) == EXIT_FAILURE)\n  ...\n  363  		// find the nexthop and interface and fill them in the \"meta\" frame\n  364  		// NOTE: the packet itself is not modified by this lookup!\n  365: 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  366  				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)\n  367  				   return EXIT_FAILURE;\n  ...\n  384  		// find the nexthop and interface and fill them in the \"meta\" frame\n  385  		// NOTE: the packet itself is not modified by this lookup!\n  386: 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),\n  387  				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)\n  388  				   return EXIT_FAILURE;\n\n/home/test/gini/backend/src/grouter/routetable.c:\n   33   * Returns NO_ERROR if match found, ERROR if no match found\n   34   */\n   35: int findRouteEntry(route_entry_t route_tbl[], uchar *ip_addr, uchar *nhop, int *ixface)\n   36  {\n   37  	int icount;\n   ..\n   43  	{\n   44  		if (route_tbl[icount].is_empty == TRUE) continue;\n   45: 		verbose(2, \"[findRouteEntry]:: Testing the route entry.. g %s at RT[%d], net %s netmask %s nexthop %s int %d\",\n   46  			       IP2Dot(tmpbuf, ip_addr), icount, IP2Dot(tmpbuf+15, route_tbl[icount].network),\n   47  			       IP2Dot(tmpbuf+30, route_tbl[icount].netmask), IP2Dot(tmpbuf+45, route_tbl[icount].nexthop),\n   ..\n   49  		if (compareIPUsingMask(ip_addr, route_tbl[icount].network, route_tbl[icount].netmask) == 0)\n   50  		{\n   51: 			verbose(2, \"[findRouteEntry]:: Found a route for %s at RT[%d], net %s netmask %s nexthop %s int %d\",\n   52  			       IP2Dot(tmpbuf, ip_addr), icount, IP2Dot(tmpbuf+15, route_tbl[icount].network),\n   53  			       IP2Dot(tmpbuf+30, route_tbl[icount].netmask), IP2Dot(tmpbuf+45, route_tbl[icount].nexthop),\n   ..\n   65  	}\n   66  \n   67: 	verbose(2, \"[findRouteEntry]:: No match for %s in route table\", IP2Dot(tmpbuf, ip_addr));\n   68  	return EXIT_FAILURE;\n   69  }\n\n7 matches across 2 files\n\n\nSearching 25 files for \"toEthernetDev\"\n\n/home/test/gini/backend/src/grouter/ethernet.c:\n   44  \n   45  \n   46: void *toEthernetDev(void *arg)\n   47  {\n   48  	gpacket_t *inpkt = (gpacket_t *)arg;\n   ..\n   52  	int pkt_size;\n   53  \n   54: 	verbose(2, \"[toEthernetDev]:: entering the function.. \");\n   55  	// find the outgoing interface and device...\n   56  	if ((iface = findInterface(inpkt->frame.dst_interface)) != NULL)\n   ..\n   64  		}\n   65  		pkt_size = findPacketSize(&(inpkt->data));\n   66: 		verbose(2, \"[toEthernetDev]:: vpl_sendto called for interface %d..%d bytes written \", iface->interface_id, pkt_size);\n   67  		vpl_sendto(iface->vpl_data, &(inpkt->data), pkt_size);\n   68  		free(inpkt);          // finally destroy the memory allocated to the packet..\n   69  	} else\n   70: 		error(\"[toEthernetDev]:: ERROR!! Could not find outgoing interface ...\");\n   71  \n   72  	// this is just a dummy return -- return value not used.\n\n4 matches in 1 file\n\n\nSearching 25 files for \"fromEthernetDev\"\n\n/home/test/gini/backend/src/grouter/ethernet.c:\n   80   * by the handler... right now.. this might capture other packets as well.\n   81   */\n   82: void* fromEthernetDev(void *arg)\n   83  {\n   84  	interface_t *iface = (interface_t *) arg;\n   ..\n   91  	while (1)\n   92  	{\n   93: 		verbose(2, \"[fromEthernetDev]:: Receiving a packet ...\");\n   94  		if ((in_pkt = (gpacket_t *)malloc(sizeof(gpacket_t))) == NULL)\n   95  		{\n   96: 			fatal(\"[fromEthernetDev]:: unable to allocate memory for packet.. \");\n   97  			return NULL;\n   98  		}\n   ..\n  107  			(COMPARE_MAC(in_pkt->data.header.dst, bcast_mac) != 0))\n  108  		{\n  109: 			verbose(1, \"[fromEthernetDev]:: Packet dropped .. not for this router!? \");\n  110  			free(in_pkt);\n  111  			continue;\n  ...\n  120  		if (filteredPacket(filter, in_pkt))\n  121  		{\n  122: 			verbose(2, \"[fromEthernetDev]:: Packet filtered..!\");\n  123  			free(in_pkt);\n  124  			continue;   // skip the rest of the loop\n  125  		}\n  126  \n  127: 		verbose(2, \"[fromEthernetDev]:: Packet is sent for enqueuing..\");\n  128  		enqueuePacket(pcore, in_pkt, sizeof(gpacket_t));\n  129  	}\n\n6 matches in 1 file\n\n\nSearching 25 files for \"fromEthernetDev\"\n\n/home/test/gini/backend/src/grouter/ethernet.c:\n   80   * by the handler... right now.. this might capture other packets as well.\n   81   */\n   82: void* fromEthernetDev(void *arg)\n   83  {\n   84  	interface_t *iface = (interface_t *) arg;\n   ..\n   91  	while (1)\n   92  	{\n   93: 		verbose(2, \"[fromEthernetDev]:: Receiving a packet ...\");\n   94  		if ((in_pkt = (gpacket_t *)malloc(sizeof(gpacket_t))) == NULL)\n   95  		{\n   96: 			fatal(\"[fromEthernetDev]:: unable to allocate memory for packet.. \");\n   97  			return NULL;\n   98  		}\n   ..\n  107  			(COMPARE_MAC(in_pkt->data.header.dst, bcast_mac) != 0))\n  108  		{\n  109: 			verbose(1, \"[fromEthernetDev]:: Packet dropped .. not for this router!? \");\n  110  			free(in_pkt);\n  111  			continue;\n  ...\n  120  		if (filteredPacket(filter, in_pkt))\n  121  		{\n  122: 			verbose(2, \"[fromEthernetDev]:: Packet filtered..!\");\n  123  			free(in_pkt);\n  124  			continue;   // skip the rest of the loop\n  125  		}\n  126  \n  127: 		verbose(2, \"[fromEthernetDev]:: Packet is sent for enqueuing..\");\n  128  		enqueuePacket(pcore, in_pkt, sizeof(gpacket_t));\n  129  	}\n\n6 matches in 1 file\n\n\nSearching 25 files for \"findPacketSize\"\n\n/home/test/gini/backend/src/grouter/ethernet.c:\n   27  extern router_config rconfig;\n   28  \n   29: int findPacketSize(pkt_data_t *pkt)\n   30  {\n   31  	ip_packet_t *ip_pkt;\n   ..\n   63  			COPY_IP(apkt->src_ip_addr, gHtonl(tmpbuf, iface->ip_addr));\n   64  		}\n   65: 		pkt_size = findPacketSize(&(inpkt->data));\n   66  		verbose(2, \"[toEthernetDev]:: vpl_sendto called for interface %d..%d bytes written \", iface->interface_id, pkt_size);\n   67  		vpl_sendto(iface->vpl_data, &(inpkt->data), pkt_size);\n\n/home/test/gini/backend/src/grouter/tap.c:\n   55  			COPY_IP(apkt->src_ip_addr, gHtonl(tmpbuf, iface->ip_addr));\n   56  		}\n   57: 		pkt_size = findPacketSize(&(inpkt->data));\n   58  \n   59  		verbose(2, \"[toTapDev]:: tap_sendto called for interface %d.. \", iface->interface_id);\n\n3 matches across 2 files\n\n\nSearching 25 files for \"fromTapDev\"\n\n/home/test/gini/backend/src/grouter/tap.c:\n   71   * TODO: Can we do these without super user permissions?\n   72   */\n   73: void* fromTapDev(void *arg)\n   74  {\n   75  	interface_t *iface = (interface_t *) arg;\n   ..\n   82  	while (1)\n   83  	{\n   84: 		verbose(2, \"[fromTapDev]:: Receiving a packet ...\");\n   85  		if ((in_pkt = (gpacket_t *)malloc(sizeof(gpacket_t))) == NULL)\n   86  		{\n   87: 			fatal(\"[fromTapDev]:: unable to allocate memory for packet.. \");\n   88  			return NULL;\n   89  		}\n   ..\n  100  			(COMPARE_MAC(in_pkt->data.header.dst, bcast_mac) != 0))\n  101  		{\n  102: 			verbose(1, \"[fromTapDev]:: Packet[%d] dropped .. not for this router!? \", pktsize);\n  103  			free(in_pkt);\n  104  			continue;\n  ...\n  113  		if (filteredPacket(filter, in_pkt))\n  114  		{\n  115: 			verbose(2, \"[fromTapDev]:: Packet filtered..!\");\n  116  			free(in_pkt);\n  117  			continue;   // skip the rest of the loop\n  118  		}\n  119  \n  120: 		verbose(2, \"[fromTapDev]:: Packet is sent for enqueuing..\");\n  121  		enqueuePacket(pcore, in_pkt, sizeof(gpacket_t));\n  122  	}\n\n6 matches in 1 file\n",
+			"settings":
+			{
+				"buffer_size": 19246,
+				"line_ending": "Unix",
+				"name": "Find Results",
+				"scratch": true
+			}
+		},
+		{
+			"file": "/home/test/gini/backend/src/grouter/tap.c",
+			"settings":
+			{
+				"buffer_size": 3413,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "/home/test/gini/backend/src/grouter/ethernet.c",
+			"settings":
+			{
+				"buffer_size": 3779,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "/home/test/gini/backend/src/grouter/simplequeue.c",
+			"settings":
+			{
+				"buffer_size": 6834,
+				"line_ending": "Unix"
+			}
+		}
+	],
+	"build_system": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 0.0
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"file_history":
+	[
+		"/home/test/gini/backend/src/grouter/utils.c"
+	],
+	"find":
+	{
+		"height": 35.0
+	},
+	"find_in_files":
+	{
+		"height": 93.0,
+		"where_history":
+		[
+			"/home/test/gini/backend/src/grouter"
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+			"fromTapDev",
+			"findPacketSize",
+			"fromEthernetDev",
+			"toEthernetDev",
+			"findRouteEntry",
+			"toEthernetDev",
+			"findRouteEntry",
+			"gNtohl",
+			"createSimpleQueue",
+			"createClassifier",
+			"ICMPProcessPacket",
+			"IPSend2Output",
+			"CLIInit",
+			"createClassifier",
+			"IPProcessForwardingPacket",
+			"IPInit",
+			"ARPInit",
+			"checksum",
+			"writeQueue",
+			"printGPacket",
+			"printGPktPayload",
+			"printTCPPacket"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"selected": 4,
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "src/grouter/grouter.c",
+					"settings":
+					{
+						"buffer_size": 5652,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								616,
+								616
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 459.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "src/grouter/gnet.c",
+					"settings":
+					{
+						"buffer_size": 19966,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								19450,
+								19450
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "src/grouter/ip.c",
+					"settings":
+					{
+						"buffer_size": 15245,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								11069,
+								11069
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 5879.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "/home/test/gini/backend/src/grouter/icmp.c",
+					"settings":
+					{
+						"buffer_size": 9014,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								470,
+								470
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 255.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"settings":
+					{
+						"buffer_size": 19246,
+						"regions":
+						{
+							"match":
+							{
+								"flags": 112,
+								"regions":
+								[
+									[
+										156,
+										173
+									],
+									[
+										336,
+										353
+									],
+									[
+										510,
+										527
+									],
+									[
+										710,
+										727
+									],
+									[
+										930,
+										947
+									],
+									[
+										1160,
+										1177
+									],
+									[
+										1454,
+										1471
+									],
+									[
+										1527,
+										1544
+									],
+									[
+										1767,
+										1784
+									],
+									[
+										2118,
+										2135
+									],
+									[
+										2332,
+										2349
+									],
+									[
+										2527,
+										2544
+									],
+									[
+										2648,
+										2665
+									],
+									[
+										2953,
+										2959
+									],
+									[
+										3223,
+										3229
+									],
+									[
+										3384,
+										3390
+									],
+									[
+										3634,
+										3640
+									],
+									[
+										3890,
+										3896
+									],
+									[
+										4229,
+										4235
+									],
+									[
+										4475,
+										4481
+									],
+									[
+										4761,
+										4767
+									],
+									[
+										5002,
+										5008
+									],
+									[
+										5276,
+										5282
+									],
+									[
+										5527,
+										5533
+									],
+									[
+										5683,
+										5689
+									],
+									[
+										6041,
+										6047
+									],
+									[
+										6316,
+										6322
+									],
+									[
+										6531,
+										6537
+									],
+									[
+										6790,
+										6796
+									],
+									[
+										6991,
+										6997
+									],
+									[
+										7271,
+										7277
+									],
+									[
+										7613,
+										7619
+									],
+									[
+										7900,
+										7906
+									],
+									[
+										8107,
+										8113
+									],
+									[
+										8425,
+										8431
+									],
+									[
+										8521,
+										8527
+									],
+									[
+										8804,
+										8810
+									],
+									[
+										8986,
+										8992
+									],
+									[
+										9133,
+										9139
+									],
+									[
+										9474,
+										9488
+									],
+									[
+										9799,
+										9813
+									],
+									[
+										10141,
+										10155
+									],
+									[
+										10459,
+										10473
+									],
+									[
+										10669,
+										10683
+									],
+									[
+										11113,
+										11127
+									],
+									[
+										11451,
+										11465
+									],
+									[
+										11817,
+										11831
+									],
+									[
+										12142,
+										12156
+									],
+									[
+										12484,
+										12498
+									],
+									[
+										12802,
+										12816
+									],
+									[
+										13012,
+										13026
+									],
+									[
+										13456,
+										13470
+									],
+									[
+										13794,
+										13808
+									],
+									[
+										14054,
+										14067
+									],
+									[
+										14190,
+										14203
+									],
+									[
+										14452,
+										14465
+									],
+									[
+										14740,
+										14753
+									],
+									[
+										15098,
+										15113
+									],
+									[
+										15240,
+										15255
+									],
+									[
+										15386,
+										15401
+									],
+									[
+										15588,
+										15603
+									],
+									[
+										15780,
+										15795
+									],
+									[
+										15937,
+										15952
+									],
+									[
+										16277,
+										16292
+									],
+									[
+										16419,
+										16434
+									],
+									[
+										16565,
+										16580
+									],
+									[
+										16767,
+										16782
+									],
+									[
+										16959,
+										16974
+									],
+									[
+										17116,
+										17131
+									],
+									[
+										17405,
+										17419
+									],
+									[
+										17582,
+										17596
+									],
+									[
+										17950,
+										17964
+									],
+									[
+										18282,
+										18292
+									],
+									[
+										18419,
+										18429
+									],
+									[
+										18560,
+										18570
+									],
+									[
+										18757,
+										18767
+									],
+									[
+										18957,
+										18967
+									],
+									[
+										19109,
+										19119
+									]
+								],
+								"scope": ""
+							}
+						},
+						"selection":
+						[
+							[
+								18114,
+								18114
+							]
+						],
+						"settings":
+						{
+							"detect_indentation": false,
+							"output_tag": 10,
+							"result_base_dir": "",
+							"result_file_regex": "^([A-Za-z\\\\/<].*):$",
+							"result_line_regex": "^ +([0-9]+):",
+							"scroll_past_end": true,
+							"syntax": "Packages/Default/Find Results.hidden-tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 7837.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 5,
+					"file": "/home/test/gini/backend/src/grouter/tap.c",
+					"settings":
+					{
+						"buffer_size": 3413,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								1770,
+								1770
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 765.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 6,
+					"file": "/home/test/gini/backend/src/grouter/ethernet.c",
+					"settings":
+					{
+						"buffer_size": 3779,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								482,
+								482
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 82.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 7,
+					"file": "/home/test/gini/backend/src/grouter/simplequeue.c",
+					"settings":
+					{
+						"buffer_size": 6834,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								695,
+								695
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 357.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 0.0
+	},
+	"input":
+	{
+		"height": 0.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"replace":
+	{
+		"height": 0.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"show_minimap": true,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 194.0,
+	"status_bar_visible": true
+}
