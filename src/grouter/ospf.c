@@ -92,5 +92,5 @@ void OSPFSendHello()
 	int pkt_size = 24;
 	ospfhdr->pkt_len = pkt_size; 
 	
-	IPOutgoingPacket(out_pkt, dst_ip, pkt_size, 1, OSPF_PROTOCOL);
+	IPOutgoingBcastAllInterPkt(out_pkt, pkt_size, 1, OSPF_PROTOCOL);
 }

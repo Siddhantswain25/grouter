@@ -347,6 +347,51 @@ int UDPProcess(gpacket_t *in_pkt)
 	return EXIT_SUCCESS;
 }
 
+/*
+ * Broadcast a given packet to all interfaces avaliable
+ */
+int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_prot)
+{
+	uchar dst_ip[4];
+	uchar iface_ip[MAX_MTU][4];
+	char tmpbuf[MAX_TMPBUF_LEN];
+	gpacket_t *cp_pkt;
+	int count, i;
+	//set broadcast flag
+	pkt->frame.bcast = TRUE;
+	//loop through each interface
+	if ((count = findAllInterfaceIPs(MTU_tbl, iface_ip)) > 0)
+	{
+		for (i = 0; i < count; i++)
+		{
+			verbose(2, "[IPOutgoingBcastAllInterPkt]:: preparing bcast for interface IP : %s ", IP2Dot(tmpbuf, iface_ip[i]));
+			//clone pkt
+			cp_pkt = duplicatePacket(pkt);
+			COPY_IP(dst_ip,iface_ip[i]);
+			//set 255 on last byte of destination IP address.
+			//Please noticed that this will only work for /24 networks.
+			dst_ip[0] = IP_BCAST_PREFIX; 
+			verbose(2, "[IPOutgoingBcastAllInterPkt]:: preparing bcast to  : %s ", IP2Dot(tmpbuf, dst_ip));
+
+			//modify if necessary
+			ip_packet_t *ip_pkt = (ip_packet_t *)cp_pkt->data.data;
+			
+			if(src_prot == OSPF_PROTOCOL) //specific modifications for OSPF_PROTOCOL
+			{
+				ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
+				//set source IP on OSPF header
+				COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip[i]));
+				//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
+				
+			}
+			//send to outgoing with each dst_ip different
+			IPOutgoingPacket(cp_pkt, dst_ip, size, 1, OSPF_PROTOCOL);
+		}
+		return TRUE;
+	} 
+		
+	return FALSE; //if no interfaces available
+}
 
 /*
  * this function processes the IP packets that are reinjected into the
@@ -417,18 +462,12 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 		// the outgoing packet should have the interface IP as source
 		COPY_IP(ip_pkt->ip_src, gHtonl(tmpbuf, iface_ip_addr));
 		
-		//OSPF final set up starts here
-		if(src_prot == OSPF_PROTOCOL) 
+		//if broadcast packet we set the address for 255.255.255.255
+		if(pkt->frame.bcast == TRUE) 
 		{
-			ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
-			//set source IP for OSPF header
-			COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip_addr));
-			//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
-			 pkt->frame.ospf_bcast = TRUE;
 			//set broadcast IP = 
 			uchar bcast_ip[] = IP_BCAST_ADDR;
 			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, bcast_ip));
-
 		}
 		verbose(2, "[IPOutgoingPacket]:: almost one processing the IP header.");
 	} else

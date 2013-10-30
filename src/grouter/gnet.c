@@ -781,7 +781,7 @@ void *GNETHandler(void *outq)
 			putARPCache(in_pkt->frame.nxth_ip_addr, in_pkt->data.header.dst);
 		else if (in_pkt->frame.arp_bcast != TRUE)
 		{
-			if(in_pkt->frame.ospf_bcast == TRUE) {
+			if(in_pkt->frame.bcast == TRUE) {
 				//set destination broadcast MAC address
 				uchar bcast_mac[] = MAC_BCAST_ADDR;
 				COPY_MAC(in_pkt->data.header.dst, bcast_mac);
