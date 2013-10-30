@@ -171,10 +171,10 @@ int printIPPacket(gpacket_t *msg)
 	printf("IP: Fragment Offset: %d Bytes\n", (ntohs(ip_pkt->ip_frag_off) & IP_OFFMASK));
 	printf("IP: Time to Live   : %d sec/hops\n", ip_pkt->ip_ttl);
 
-	printf("IP: Protocol       : %d", ip_pkt->ip_prot);
+	printf("IP: Protocol       : %d\n", ip_pkt->ip_prot);
 	printf("IP: Checksum       : 0x%X\n", ntohs(ip_pkt->ip_cksum));
-	printf("IP: Source         : %s", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_src)));
-	printf("IP: Destination    : %s", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_dst)));
+	printf("IP: Source         : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_src)));
+	printf("IP: Destination    : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ip_pkt->ip_dst)));
 
 	return ip_pkt->ip_prot;
 }

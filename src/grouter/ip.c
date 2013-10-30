@@ -13,6 +13,7 @@
 #include "ip.h"
 #include "fragment.h"
 #include "packetcore.h"
+ #include "ospf.h"
 #include <stdlib.h>
 #include <slack/err.h>
 #include <netinet/in.h>
@@ -103,7 +104,13 @@ int IPCheckPacket4Me(gpacket_t *in_pkt)
  */
 int IPProcessBcastPacket(gpacket_t *in_pkt)
 {
-
+	ip_packet_t *ip_pkt = (ip_packet_t *)in_pkt->data.data;
+	char tmpbuf[MAX_TMPBUF_LEN];
+	verbose(2, "[IPProcessBcastPacket]:: Received broadcast packet from %s ", IP2Dot(tmpbuf, ip_pkt->ip_src));
+	if(ip_pkt->ip_prot == OSPF_PROTOCOL){
+		OSPFProcessPacket(in_pkt);
+		return EXIT_SUCCESS;
+	}
 	return EXIT_SUCCESS;
 }
 
@@ -301,6 +308,7 @@ int IPProcessMyPacket(gpacket_t *in_pkt)
 {
 	ip_packet_t *ip_pkt = (ip_packet_t *)in_pkt->data.data;
 
+
 	if (IPVerifyPacket(ip_pkt) == EXIT_SUCCESS)
 	{
 		// Is packet ICMP? send it to the ICMP module
@@ -350,7 +358,7 @@ int UDPProcess(gpacket_t *in_pkt)
  */
 int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int src_prot)
 {
-        ip_packet_t *ip_pkt = (ip_packet_t *)pkt->data.data;
+    ip_packet_t *ip_pkt = (ip_packet_t *)pkt->data.data;
 	ushort cksum;
 	char tmpbuf[MAX_TMPBUF_LEN];
 	uchar iface_ip_addr[4];
@@ -391,20 +399,42 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 		// find the nexthop and interface and fill them in the "meta" frame
 		// NOTE: the packet itself is not modified by this lookup!
 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),
-				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)
-				   return EXIT_FAILURE;
+				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE) {
+			error("[IPOutgoingPacket]:: couldn't find route entry ");
+			printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
+			return EXIT_FAILURE;
+		}
 
 		verbose(2, "[IPOutgoingPacket]:: lookup MTU of nexthop");
 		// lookup the IP address of the destination interface..
 		if ((status = findInterfaceIP(MTU_tbl, pkt->frame.dst_interface,
-					      iface_ip_addr)) == EXIT_FAILURE)
-					      return EXIT_FAILURE;
+					      iface_ip_addr)) == EXIT_FAILURE) {
+			error("[IPOutgoingPacket]:: couldn't find interface ");
+			printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
+			return EXIT_FAILURE;
+		}
+					      
 		// the outgoing packet should have the interface IP as source
 		COPY_IP(ip_pkt->ip_src, gHtonl(tmpbuf, iface_ip_addr));
+		
+		//OSPF final set up starts here
+		if(src_prot == OSPF_PROTOCOL) 
+		{
+			ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
+			//set source IP for OSPF header
+			COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip_addr));
+			//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
+			 pkt->frame.ospf_bcast = TRUE;
+			//set broadcast IP = 
+			uchar bcast_ip[] = IP_BCAST_ADDR;
+			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, bcast_ip));
+
+		}
 		verbose(2, "[IPOutgoingPacket]:: almost one processing the IP header.");
 	} else
 	{
 		error("[IPOutgoingPacket]:: unknown outgoing packet action.. packet discarded ");
+		printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
 		return EXIT_FAILURE;
 	}
 
@@ -413,6 +443,7 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 	ip_pkt->ip_cksum = htons(cksum);
 	pkt->data.header.prot = htons(IP_PROTOCOL);
 
+	printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
 	IPSend2Output(pkt);
 	verbose(2, "[IPOutgoingPacket]:: IP packet sent to output queue.. ");
 	return EXIT_SUCCESS;

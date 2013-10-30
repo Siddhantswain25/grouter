@@ -55,6 +55,7 @@ void OSPFSendHello()
 	verbose(2, "[OSPFSendHello]:: Broadcasting Hello Message");
 
 	//loop through each interface
+	//findAllInterfaceIPs
 
 	gpacket_t *out_pkt = (gpacket_t *) malloc(sizeof(gpacket_t));
 	ip_packet_t *ipkt = (ip_packet_t *)(out_pkt->data.data);
@@ -70,19 +71,26 @@ void OSPFSendHello()
 	ospfhdr->authtype = 0; // always 0
 
 	//set source IP - uchar ip_src[4];
+	/*
 	uchar *temp = "192.168.2.128"; //for debug
-	Dot2IP(temp,ospfhdr->ip_src);
-	uchar dst_ip[4];
-	uchar *temp_dst_ip = "192.168.2.129"; //for debug
-	Dot2IP(temp_dst_ip, dst_ip);
+	uchar src_ip[4];
+	Dot2IP(temp,src_ip);
+	COPY_IP(ospfhdr->ip_src, src_ip);
 	char tmpbuf[MAX_TMPBUF_LEN];
+	printf("OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
+	*/
+	//get destination IP
+	uchar dst_ip[4];
+	uchar *temp_dst_ip = "192.168.2.255"; //for debug
+	Dot2IP(temp_dst_ip, dst_ip);
+	
+	
 	//set authentication  - uchar auth[4];
 	//ospfhdr->auth = NULL;
 
 	//set total pkt_len
 	int pkt_size = 24;
 	ospfhdr->pkt_len = pkt_size; 
-	printGPacket(out_pkt, 3, "IP_ROUTINE");
 	
 	IPOutgoingPacket(out_pkt, dst_ip, pkt_size, 1, OSPF_PROTOCOL);
 }

@@ -781,7 +781,12 @@ void *GNETHandler(void *outq)
 			putARPCache(in_pkt->frame.nxth_ip_addr, in_pkt->data.header.dst);
 		else if (in_pkt->frame.arp_bcast != TRUE)
 		{
-			if ((cached = lookupARPCache(in_pkt->frame.nxth_ip_addr,
+			if(in_pkt->frame.ospf_bcast == TRUE) {
+				//set destination broadcast MAC address
+				uchar bcast_mac[] = MAC_BCAST_ADDR;
+				COPY_MAC(in_pkt->data.header.dst, bcast_mac);
+			}
+			else if ((cached = lookupARPCache(in_pkt->frame.nxth_ip_addr,
 						     mac_addr)) == TRUE)
 				COPY_MAC(in_pkt->data.header.dst, mac_addr);
 			else
