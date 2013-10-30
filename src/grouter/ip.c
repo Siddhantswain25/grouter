@@ -103,6 +103,7 @@ int IPCheckPacket4Me(gpacket_t *in_pkt)
  */
 int IPProcessBcastPacket(gpacket_t *in_pkt)
 {
+
 	return EXIT_SUCCESS;
 }
 
@@ -308,18 +309,20 @@ int IPProcessMyPacket(gpacket_t *in_pkt)
 		if (ip_pkt->ip_prot == ICMP_PROTOCOL) {
 			ICMPProcessPacket(in_pkt);
 		  return EXIT_SUCCESS;
-    }
-
-    	/*
-		* Lineker: implementation of UDP starts here.
-		*/
+    	}
 
 		// Is packet UDP/TCP (only UDP implemented now)
 		// May be we can deal with other connectionless protocols as well.
 		if (ip_pkt->ip_prot == UDP_PROTOCOL){
 			UDPProcess(in_pkt);
 		  return EXIT_SUCCESS;
-    }
+    	}
+
+
+    	if(ip_pkt->ip_prot == OSPF_PROTOCOL){
+			OSPFProcessPacket(in_pkt);
+		  return EXIT_SUCCESS;
+		}
 
 	}
 	return EXIT_FAILURE;
@@ -383,7 +386,7 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 
 		COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, dst_ip));
 		ip_pkt->ip_pkt_len = htons(size + ip_pkt->ip_hdr_len * 4);
-
+		//printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
 		verbose(2, "[IPOutgoingPacket]:: lookup next hop ");
 		// find the nexthop and interface and fill them in the "meta" frame
 		// NOTE: the packet itself is not modified by this lookup!

@@ -8,6 +8,7 @@
 #include "protocols.h"
 #include "ip.h"
 #include "arp.h"
+#include "ospf.h"
 
 
 gpacket_t *duplicatePacket(gpacket_t *inpkt)
@@ -79,6 +80,8 @@ void printGPktPayload(gpacket_t *msg, int level)
 			printUDPPacket(msg);
 		case TCP_PROTOCOL:
 			printTCPPacket(msg);
+		case OSPF_PROTOCOL:
+			printOSPFPacket(msg);
 		}
 		break;
 	case ARP_PROTOCOL:
@@ -90,6 +93,25 @@ void printGPktPayload(gpacket_t *msg, int level)
 	}
 }
 
+int printOSPFPacket(gpacket_t *msg)
+{
+	ip_packet_t *ipkt;
+	ospfhdr_t *ospfhdr;
+	char tmpbuf[MAX_TMPBUF_LEN];
+
+	ipkt = (ip_packet_t *)msg->data.data;
+	ospfhdr = (ospfhdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4); 
+	printf("OSPF: ----- OSPF Header -----\n");
+	printf("OSPF: Version        : %d\n", ospfhdr->version);
+	printf("OSPF: Type           : %d\n", ospfhdr->type);
+	printf("OSPF: Total Length   : %d Bytes\n", ntohs(ospfhdr->pkt_len));
+	printf("OSPF: Source         : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
+	printf("OSPF: Area ID        : %d\n", ospfhdr->area_id);
+	printf("OSPF: Checksum       : 0x%X\n", ntohs(ospfhdr->cksum));
+	printf("OSPF: Auth Type      : %d\n", ospfhdr->authtype);
+	printf("OSPF: Authentication : %s\n", ospfhdr->auth);
+
+}
 
 int printEthernetHeader(gpacket_t *msg)
 {

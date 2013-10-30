@@ -55,6 +55,7 @@ extern pktcore_t *pcore;
  */
 int CLIInit(router_config *rarg)
 {
+	prog_set_verbosity_level(2);
 
 	int stat, *jstat;
 
@@ -91,6 +92,7 @@ int CLIInit(router_config *rarg)
 	registerCLI("spolicy", spolicyCmd, SHELP_SPOLICY, USAGE_SPOLICY, LHELP_SPOLICY); // Check
 	registerCLI("class", classCmd, SHELP_CLASS, USAGE_CLASS, LHELP_CLASS);
 	registerCLI("filter", filterCmd, SHELP_FILTER, USAGE_FILTER, LHELP_FILTER);
+	registerCLI("ospf", ospfCmd, SHELP_OSPF, USAGE_OSPF, LHELP_OSPF);
 
 
 	if (rarg->config_dir != NULL)
@@ -854,6 +856,39 @@ void pingCmd()
 	} else
 		pkt_size = 64;
 	ICMPDoPing(ip_addr, pkt_size, tries);
+}
+
+/*
+ * send a ospf packet...
+ * ospf [-type] IP_addr <-dont need ip since is a broadcast
+ */
+
+void ospfCmd()
+{
+	verbose(2, "[ospfCmd]:: Hello World 1");
+	
+	char *next_tok = strtok(NULL, " \n");
+	int type;
+
+	if (next_tok == NULL) //forces parameters.
+		return;
+
+	if (!strcmp(next_tok, "-hello"))
+	{
+		OSPFSendHello();
+	} else if (!strcmp(next_tok, "-lsa")) {
+		verbose(2, "[ospfCmd]:: Not Implemented -> broadcast LSA");
+	}
+
+
+	/*if(type == 1) {
+		OSPFSendHello();	
+	} else {
+		verbose(2, "[ospfCmd]:: Not Implemented -> broadcast LSA");
+	}*/
+	
+	
+	//ICMPDoPing(ip_addr, pkt_size, tries);
 }
 
 

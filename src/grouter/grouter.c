@@ -16,6 +16,7 @@
 #include "classifier.h"
 #include "filter.h"
 #include <pthread.h>
+//#include "ospf.h"
 
 router_config rconfig = {.router_name=NULL, .gini_home=NULL, .cli_flag=0, .config_file=NULL, .config_dir=NULL, .ghandler=0, .clihandler= 0, .scheduler=0, .worker=0, .schedcycle=10000};
 pktcore_t *pcore;
@@ -53,6 +54,9 @@ int isPIDAlive(int pid);
 
 int main(int ac, char *av[])
 {
+	//debugging
+	//OSPFSendHello();
+
 	char rpath[MAX_NAME_LEN];
 	int status, *jstatus;
 	simplequeue_t *outputQ, *workQ, *qtoa;

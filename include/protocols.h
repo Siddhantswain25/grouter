@@ -19,4 +19,6 @@
 #define TCP_PROTOCOL 		    6
 #define UDP_PROTOCOL 		    17
 
+// From OSFP RFC 2328
+#define OSPF_PROTOCOL			89
 #endif
