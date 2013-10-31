@@ -446,7 +446,6 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),
 				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE) {
 			error("[IPOutgoingPacket]:: couldn't find route entry ");
-			printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
 			return EXIT_FAILURE;
 		}
 
@@ -455,7 +454,6 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 		if ((status = findInterfaceIP(MTU_tbl, pkt->frame.dst_interface,
 					      iface_ip_addr)) == EXIT_FAILURE) {
 			error("[IPOutgoingPacket]:: couldn't find interface ");
-			printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
 			return EXIT_FAILURE;
 		}
 					      
@@ -473,7 +471,6 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 	} else
 	{
 		error("[IPOutgoingPacket]:: unknown outgoing packet action.. packet discarded ");
-		printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
 		return EXIT_FAILURE;
 	}
 
@@ -482,7 +479,6 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 	ip_pkt->ip_cksum = htons(cksum);
 	pkt->data.header.prot = htons(IP_PROTOCOL);
 
-	printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
 	IPSend2Output(pkt);
 	verbose(2, "[IPOutgoingPacket]:: IP packet sent to output queue.. ");
 	return EXIT_SUCCESS;

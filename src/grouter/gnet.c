@@ -28,7 +28,7 @@ extern route_entry_t route_tbl[MAX_ROUTES];
 interface_array_t netarray;
 devicearray_t devarray;
 arp_entry_t arp_cache[ARP_CACHE_SIZE];
-
+int num_iface_online;
 
 /*----------------------------------------------------------------------------------
  *             D E V I C E  M A N A G E M E N T  F U N C T I O N S
@@ -61,7 +61,6 @@ int createAllDevices(devicearray_t *dev)
 		dev->elem[i].fromdev = devdir[i].fromdev;
 		dev->elem[i].todev = devdir[i].todev;
 	}
-
 	return EXIT_SUCCESS;
 }
 
