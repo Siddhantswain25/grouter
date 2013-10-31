@@ -54,31 +54,6 @@ int isPIDAlive(int pid);
 
 int main(int ac, char *av[])
 {
-	//debugging
-	uchar dst_ip[4];
-	uchar *temp_dst_ip = "192.168.2.3"; //for debug
-	Dot2IP(temp_dst_ip, dst_ip);
-	uchar src_ip[4];
-	uchar *temp_src_ip = "192.168.2.2"; //for debug
-	Dot2IP(temp_src_ip, src_ip);
-	OSPFInit();
-	printNeighboursTableTable();
-	addNeighbourEntry(src_ip, dst_ip);
-	printNeighboursTableTable();
-	
-	addNeighbourEntry(dst_ip , src_ip);
-	addNeighbourEntry(dst_ip , src_ip);
-	
-	printNeighboursTableTable();
-
-	printf("is IB : %d\n", isNeighbourBidirectional(dst_ip));
-	printf("is IB : %d\n", isNeighbourBidirectional(src_ip));
-	
-	deleteNeighbourEntry(src_ip);
-	printNeighboursTableTable();
-	exit(1);
-
-
 	char rpath[MAX_NAME_LEN];
 	int status, *jstatus;
 	simplequeue_t *outputQ, *workQ, *qtoa;

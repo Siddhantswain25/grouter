@@ -139,7 +139,7 @@ void addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr)
 		nbours_tbl[index].is_empty = FALSE;
 		COPY_IP(nbours_tbl[index].iface_ip_addr, iface_ip_addr);
 		COPY_IP(nbours_tbl[index].nbour_ip_addr, nbour_ip_addr);
-		printf("[addNeighbourEntry]:: added neighbour: %s \n", IP2Dot(tmpbuf, nbours_tbl[index].nbour_ip_addr));
+		verbose(2,"[addNeighbourEntry]:: added neighbour: %s \n", IP2Dot(tmpbuf, nbours_tbl[index].nbour_ip_addr));
 	}
 
 	return;
@@ -154,7 +154,8 @@ void deleteNeighbourEntry(uchar *nbour_ip_addr)
 {
 	char tmpbuf[MAX_TMPBUF_LEN];
 	int i;
-	if(i = findNeighbourIndex(nbour_ip_addr) >= 0)
+	i = findNeighbourIndex(nbour_ip_addr);
+	if(i >= 0)
 	{
 		nbours_tbl[i].is_empty = TRUE;
 		verbose(2, "[deleteNeighbourEntry]:: Deleted reference to neighbour: %s\n", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
@@ -169,9 +170,11 @@ void deleteNeighbourEntry(uchar *nbour_ip_addr)
  */
 int findNeighbourIndex(uchar *nbour_ip_addr)
 {
+	char tmpbuf[MAX_TMPBUF_LEN];
+	
 	int i;
 	for (i = 0; i < MAX_INTERFACES; i++) {
-		if(nbours_tbl[i].is_empty != TRUE &&
+		if(nbours_tbl[i].is_empty == FALSE &&
 		   COMPARE_IP(nbours_tbl[i].nbour_ip_addr, nbour_ip_addr) == 0)
 		{
 			return i;
@@ -183,10 +186,13 @@ int findNeighbourIndex(uchar *nbour_ip_addr)
 
 int isNeighbourBidirectional(uchar *nbour_ip_addr) {
 	int index;
-	if(index = findNeighbourIndex(nbour_ip_addr) >= 0)
+	char tmpbuf[MAX_TMPBUF_LEN];
+	index = findNeighbourIndex(nbour_ip_addr);
+	if( index >= 0)
 	{
-		if(nbours_tbl[index].bidirectional == TRUE)
+		if(nbours_tbl[index].bidirectional == TRUE) {
 			return TRUE;
+		}
 	}
 	return FALSE;
 }
