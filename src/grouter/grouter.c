@@ -54,6 +54,27 @@ int isPIDAlive(int pid);
 
 int main(int ac, char *av[])
 {
+	/*
+	NeighboursTableInit();
+	uchar *temp = "192.168.2.128"; //for debug
+	uchar iface[4];
+	Dot2IP(temp,iface);
+	
+	uchar *temp2 = "192.168.2.129"; //for debug
+	uchar nbour[4];
+	Dot2IP(temp2,nbour);
+
+	uchar *temp3 = "192.168.2.130"; //for debug
+	uchar nbour2[4];
+	Dot2IP(temp3,nbour2);
+
+	addNeighbourEntry(iface, nbour);
+	addNeighbourEntry(iface, nbour2);
+	printNeighboursTableTable();
+
+	OSPFSendHello();
+	exit(1);
+	*/
 	char rpath[MAX_NAME_LEN];
 	int status, *jstatus;
 	simplequeue_t *outputQ, *workQ, *qtoa;

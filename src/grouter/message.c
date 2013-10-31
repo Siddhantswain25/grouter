@@ -93,7 +93,7 @@ void printGPktPayload(gpacket_t *msg, int level)
 	}
 }
 
-int printOSPFPacket(gpacket_t *msg)
+void printOSPFPacket(gpacket_t *msg)
 {
 	ip_packet_t *ipkt;
 	ospfhdr_t *ospfhdr;
@@ -102,15 +102,47 @@ int printOSPFPacket(gpacket_t *msg)
 	ipkt = (ip_packet_t *)msg->data.data;
 	ospfhdr = (ospfhdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4); 
 	printf("OSPF: ----- OSPF Header -----\n");
-	printf("OSPF: Version        : %d\n", ospfhdr->version);
-	printf("OSPF: Type           : %d\n", ospfhdr->type);
-	printf("OSPF: Total Length   : %d Bytes\n", ntohs(ospfhdr->pkt_len));
-	printf("OSPF: Source         : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
-	printf("OSPF: Area ID        : %d\n", ospfhdr->area_id);
-	printf("OSPF: Checksum       : 0x%X\n", ntohs(ospfhdr->cksum));
-	printf("OSPF: Auth Type      : %d\n", ospfhdr->authtype);
-	printf("OSPF: Authentication : %s\n", ospfhdr->auth);
+	printf("OSPF: Version        		: %d\n", ospfhdr->version);
+	printf("OSPF: Type           		: %d\n", ospfhdr->type);
+	printf("OSPF: Total Length   		: %d Bytes\n", ospfhdr->pkt_len);
+	printf("OSPF: Source         		: %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
+	printf("OSPF: Area ID        		: %d\n", ospfhdr->area_id);
+	printf("OSPF: Checksum       		: 0x%X\n", ntohs(ospfhdr->cksum));
+	printf("OSPF: Auth Type      		: %d\n", ospfhdr->authtype);
+	printf("OSPF: Authentication 		: %s\n", ospfhdr->auth);
 
+	if(ospfhdr->type == OSPF_HELLO_MESSAGE) {
+		printOSPFHelloPacket(msg);
+	}
+}
+
+void printOSPFHelloPacket(gpacket_t *msg) {
+	ip_packet_t *ipkt;
+	ospfhdr_t *ospfhdr;
+	ospf_hello_t *hellomsg;
+	char tmpbuf[MAX_TMPBUF_LEN];
+	int num_nbours, i;
+	ipkt = (ip_packet_t *)msg->data.data;
+	ospfhdr = (ospfhdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4);
+	hellomsg = (ospf_hello_t *)((uchar *)ospfhdr + 24); //move ptr
+	num_nbours = (ospfhdr->pkt_len - OSPF_HEADER_SIZE - OSPF_HELLO_MSG_SIZE)/4;
+	
+	printf("OSPF: ----- OSPF Hello Message -----\n");
+	printf("OSPF: Network Mask   		: %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf), hellomsg->netmask)));
+	printf("OSPF: Options        		: %d\n", hellomsg->options);
+	printf("OSPF: Priority           	: %d\n", hellomsg->priority);
+	printf("OSPF: Hello Interval   		: %d\n", hellomsg->hello_interval);
+	printf("OSPF: Dead Interval         	: %d\n", hellomsg->dead_interval);
+	printf("OSPF: Designed Router IP     	: %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), hellomsg->designed_router_addr)));
+	printf("OSPF: Backcup Router IP      	: %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), hellomsg->bkp_router_addr)));
+	printf("OSPF: Neighbours      		: ");
+	
+	//uchar *temp = hellomsg->nbours_addr;
+	for (i = 0; i < num_nbours; ++i)
+	{
+		if(i > 0) printf("\t\t\t\t  ");
+		printf("%s\n", IP2Dot(tmpbuf,hellomsg->nbours_addr[i]));
+	}
 }
 
 int printEthernetHeader(gpacket_t *msg)
