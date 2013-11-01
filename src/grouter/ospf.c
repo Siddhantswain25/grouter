@@ -92,8 +92,8 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt)
 		if(COMPARE_IP(in_pkt->frame.src_ip_addr, hellomsg->nbours_addr[i]) == 0) {
 			//flip bidirectional flag
 			int result = setBidirectionalFlag(gHtonl(tmpbuf, ospfhdr->ip_src), TRUE);
-			//send to next step
-			void OSPFSendLSA();
+			//TODO: send to next step
+			//OSPFSendLSA();
 		}
 	}
 	//if nothing changes, do nothing
@@ -194,9 +194,9 @@ void OSPFSendLSA() {
 }
 
 void OSPFSendHelloThread() {
-	struct timeval first;
-	struct timeval second;
-	double elapsed_time;
+	//struct timeval first;
+	//struct timeval second;
+	//double elapsed_time;
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	while (1)
 	{
@@ -229,6 +229,8 @@ void OSPFNeighbourLivenessChecker()
 				if(elapsed_time > 40000){
 					deleteNeighbourEntry(nbours_tbl[i].nbour_ip_addr);
 					verbose(3,"Neighbour %s is dead. deleting...", IP2Dot(tmpbuf,  nbours_tbl[i].nbour_ip_addr));
+
+					//TODO: SEND LSA
 				}
 
 			}

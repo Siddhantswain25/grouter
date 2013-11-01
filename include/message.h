@@ -45,6 +45,7 @@ typedef struct _pkt_frame_t
 	uchar nxth_ip_addr[4];           // destination interface IP address; required by ARP, filled IP
 	int arp_valid;
 	int arp_bcast;
+	int bcast;
 } pkt_frame_t;
 
 
@@ -67,5 +68,7 @@ void printARPPacket(gpacket_t *msg);
 void printICMPPacket(gpacket_t *msg);
 void printUDPPacket(gpacket_t *msg);
 void printTCPPacket(gpacket_t *msg);
+void printOSPFHelloPacket(gpacket_t *msg);
+void printOSPFPacket(gpacket_t *msg);
 
 #endif

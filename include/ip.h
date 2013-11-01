@@ -72,5 +72,5 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 int send2Output(gpacket_t *pkt);
 int IPVerifyPacket(ip_packet_t *ip_pkt);
 int isInSameNetwork(uchar *ip_addr1, uchar *ip_addr2);
-
+int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_prot);
 #endif

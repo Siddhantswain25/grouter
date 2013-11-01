@@ -65,7 +65,8 @@
 #define COMPARE_IP(X, Y)            ( memcmp(X, Y, 4) )
 #define MAC_BCAST_ADDR              {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
 #define IP_BCAST_ADDR               {0xFF, 0xFF, 0xFF, 0xFF}
-
+#define IP_BCAST_PREFIX             0xFF
+#define IP_ZERO_PREFIX             	0x00
 // check IP RFC specifications
 
 #define NORMAL_LISTING              11

@@ -67,9 +67,6 @@ typedef struct _vplinfo_t
 	interface_t *iface;
 } vplinfo_t;
 
-
-
-
 // function prototype go here...
 interface_t *GNETMakeEthInterface(char *vsock_name, char *device,
 			   uchar *mac_addr, uchar *nw_addr, int iface_mtu, int cforce);
