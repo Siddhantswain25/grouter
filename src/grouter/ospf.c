@@ -20,13 +20,20 @@ void OSPFInit()
 	//RouteTableInit(route_tbl);
 	NeighboursTableInit(nbours_tbl);
 
+	pthread_t threadid;
+
+	int threadstat = pthread_create((pthread_t *)&threadid, NULL, (void *)OSPFSendHelloThread, (void *)NULL);
+	if (threadstat != 0)
+	{
+		verbose(1, "[OSPFInit]:: unable to create Hello Message thread ...");
+		return EXIT_FAILURE;
+	}
 }
 
 void OSPFProcessPacket(gpacket_t *in_pkt)
 {
-	printGPacket(in_pkt, 3, "IP_ROUTINE"); //for debug
 	ip_packet_t *ip_pkt = (ip_packet_t *)in_pkt->data.data;
-	int iphdrlen = ip_pkt->ip_hdr_len *4; //not sure about this 4!
+	int iphdrlen = ip_pkt->ip_hdr_len *4; //move ptr to begin of he ospf header
 	ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + iphdrlen);
 
 	switch (ospfhdr->type)
@@ -55,47 +62,55 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt)
 	num_nbours = (ospfhdr->pkt_len - OSPF_HEADER_SIZE - OSPF_HELLO_MSG_SIZE)/4; //divide by 4, since each IP has 4 bytes
 	int exist = 0;
 
-	printNeighboursTableTable();
 	exist = addNeighbourEntry(in_pkt->frame.src_ip_addr,gHtonl(tmpbuf, ospfhdr->ip_src));
 	if(exist > 0) {
 		//reset timer
-		printf("RESET TIMER \n");
+		verbose(2, "NOT IMPLEMENTED: RESET TIMER \n");
 	} else {
 		//create new timer
-		printf("CREATE NEW TIMER \n");
+		verbose(2, "NOT IMPLEMENTED: CREATE NEW TIMER \n");
 	}
-	printNeighboursTableTable();
-	
 	
 	// We don't added the neighbours of our neighbours to our list
 	// but we check to see if they have us on their list, if YES, we have a bidirectional connection
 	for (i = 0; i < num_nbours; ++i)
 	{
 		int result;
-		printf("COMPARE_IP( %s  , %s ) = %d \n",IP2Dot(tmpbuf, in_pkt->frame.src_ip_addr), 
+		/*printf("COMPARE_IP( %s  , %s ) = %d \n",IP2Dot(tmpbuf, in_pkt->frame.src_ip_addr), 
 												IP2Dot(tmpbuf, hellomsg->nbours_addr[i]), 
 												COMPARE_IP(in_pkt->frame.src_ip_addr, 
-															hellomsg->nbours_addr[i]));
-		
+															hellomsg->nbours_addr[i]));*/
 		if(COMPARE_IP(in_pkt->frame.src_ip_addr, hellomsg->nbours_addr[i]) == 0) {
 			//flip bidirectional flag
 			int result = setBidirectionalFlag(gHtonl(tmpbuf, ospfhdr->ip_src), TRUE);
 			//send to next step
+			void OSPFSendLSA();
 		}
 	}
 	//if nothing changes, do nothing
-
-	printNeighboursTableTable();
 }
 
 void OSPFProcessLSA(gpacket_t *in_pkt)
 {
-
+	printf("[OSPFProcessLSA]:: Not Implemented -> broadcast LSA");
 }
 
 void craftCommonOSPFHeader(ospfhdr_t *ospfhdr)
 {
 
+}
+
+void OSPFSendLSA() {
+	printf("[OSPFSendLSA]:: Not Implemented -> broadcast LSA");
+}
+
+void OSPFSendHelloThread() {
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+	while (1)
+	{
+		OSPFSendHello();
+		usleep(10000000); //10seconds
+	}
 }
 
 void OSPFSendHello()
@@ -174,8 +189,6 @@ void OSPFSendHello()
 	//set total pkt_len on OSPF common header
 	ospfhdr->pkt_len = OSPF_HEADER_SIZE + OSPF_HELLO_MSG_SIZE + (num_of_neighbours*4) ; //each nbour ip is 4 bytes * #of nbours
 	
-	printOSPFPacket(out_pkt); //for debug
-	
 	IPOutgoingBcastAllInterPkt(out_pkt, ospfhdr->pkt_len, 1, OSPF_PROTOCOL);
 }
 
@@ -196,7 +209,7 @@ void NeighboursTableInit()
 int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag) {
 	int index; 
 	char tmpbuf[MAX_TMPBUF_LEN];
-	printf("[setBidirectionalFlag]:: Flipping bidirectional flag for : %s \n",IP2Dot(tmpbuf, nbour_ip_addr));
+	verbose(2, "[setBidirectionalFlag]:: Flipping bidirectional flag for : %s \n",IP2Dot(tmpbuf, nbour_ip_addr));
 	index = findNeighbourIndex(nbour_ip_addr);
 	if(index >= 0) {
 		nbours_tbl[index].bidirectional = flag;
@@ -316,7 +329,7 @@ int getEmptyIndex() {
 /*
  * print neighbours table
  */
-void printNeighboursTableTable()
+void printNeighboursTable()
 {
 	int i;
 	char tmpbuf[MAX_TMPBUF_LEN];

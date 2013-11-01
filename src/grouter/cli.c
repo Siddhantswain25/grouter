@@ -55,7 +55,7 @@ extern pktcore_t *pcore;
  */
 int CLIInit(router_config *rarg)
 {
-	prog_set_verbosity_level(2);
+	//prog_set_verbosity_level(2);
 
 	int stat, *jstat;
 
@@ -873,11 +873,13 @@ void ospfCmd()
 	if (next_tok == NULL) //forces parameters.
 		return;
 
-	if (!strcmp(next_tok, "-hello"))
+	if (!strcmp(next_tok, "-bcasthello") || !strcmp(next_tok, "-h"))
 	{
 		OSPFSendHello();
-	} else if (!strcmp(next_tok, "-lsa")) {
-		verbose(2, "[ospfCmd]:: Not Implemented -> broadcast LSA");
+	} else if (!strcmp(next_tok, "-bcastlsa") || !strcmp(next_tok, "-a")) {
+		OSPFSendLSA();
+	} else if (!strcmp(next_tok, "-printneighbours") || !strcmp(next_tok, "-n")) {
+		printNeighboursTable();
 	}
 
 

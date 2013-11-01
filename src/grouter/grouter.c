@@ -70,7 +70,7 @@ int main(int ac, char *av[])
 
 	addNeighbourEntry(iface, nbour);
 	addNeighbourEntry(iface, nbour2);
-	printNeighboursTableTable();
+	printNeighboursTable();
 
 	OSPFSendHello();
 	exit(1);
