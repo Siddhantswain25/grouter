@@ -21,8 +21,16 @@ void OSPFInit()
 	NeighboursTableInit(nbours_tbl);
 
 	pthread_t threadid;
+	pthread_t threadid2;
 
 	int threadstat = pthread_create((pthread_t *)&threadid, NULL, (void *)OSPFSendHelloThread, (void *)NULL);
+	if (threadstat != 0)
+	{
+		verbose(1, "[OSPFInit]:: unable to create Hello Message thread ...");
+		return EXIT_FAILURE;
+	}
+
+	threadstat = pthread_create((pthread_t *)&threadid2, NULL, (void *)OSPFNeighbourLivenessChecker, (void *)NULL);
 	if (threadstat != 0)
 	{
 		verbose(1, "[OSPFInit]:: unable to create Hello Message thread ...");
@@ -53,6 +61,7 @@ void OSPFProcessPacket(gpacket_t *in_pkt)
 
 void OSPFProcessHelloMessage(gpacket_t *in_pkt)
 {
+	verbose(1, "[OSPFProcessHelloMessage]:: Received Hello Message. processing... \n");
 	char tmpbuf[MAX_TMPBUF_LEN];
 	ip_packet_t *ip_pkt = (ip_packet_t *)in_pkt->data.data;
 	ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
@@ -95,9 +104,16 @@ void OSPFProcessLSA(gpacket_t *in_pkt)
 	printf("[OSPFProcessLSA]:: Not Implemented -> broadcast LSA");
 }
 
-void craftCommonOSPFHeader(ospfhdr_t *ospfhdr)
+void craftCommonOSPFHeader(ospfhdr_t *ospfhdr, int ospf_pkt_size, int pkt_type)
 {
-
+	/* craft OSPF Header */
+	ospfhdr->version = 2; //always 2
+	ospfhdr->area_id = 0; //always 0
+	ospfhdr->cksum = 0; //TODO: compute checksum as IP does.
+	ospfhdr->authtype = 0; // always 0
+	//ospfhdr->auth always NULL
+	ospfhdr->pkt_len = ospf_pkt_size;
+	ospfhdr->type = pkt_type;
 }
 
 void OSPFSendLSA() {
@@ -105,11 +121,47 @@ void OSPFSendLSA() {
 }
 
 void OSPFSendHelloThread() {
+	struct timeval first;
+	struct timeval second;
+	double elapsed_time;
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	while (1)
 	{
 		OSPFSendHello();
+		//gettimeofday(&first, NULL);
 		usleep(10000000); //10seconds
+		//gettimeofday(&second, NULL);
+		//elapsed_time = subTimeVal(&second, &first);
+		//printf("SLEEPED FOR %6.3f ms \n", elapsed_time);
+	}
+}
+
+void OSPFNeighbourLivenessChecker()
+{
+	char tmpbuf[MAX_TMPBUF_LEN];
+	struct timeval second;
+	double elapsed_time;
+	int i;
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+	while (1)
+	{
+		for (i = 0; i < MAX_INTERFACES; i++)
+		{
+			if (nbours_tbl[i].is_empty == FALSE)
+			{
+				gettimeofday(&second, NULL);
+				elapsed_time = subTimeVal(&second, &nbours_tbl[i].tv);
+				printf("Received hello %6.3f ms ago from %s\n", elapsed_time, IP2Dot(tmpbuf,  nbours_tbl[i].nbour_ip_addr));
+				//COPY_IP(buf[count], nbours_tbl[i].nbour_ip_addr);
+				if(elapsed_time > 40000){
+					deleteNeighbourEntry(nbours_tbl[i].nbour_ip_addr);
+					printf("Neighbour %s is dead. deleting...", IP2Dot(tmpbuf,  nbours_tbl[i].nbour_ip_addr));
+				}
+
+			}
+		}
+		
+		usleep(5000000); //5seconds
 	}
 }
 
@@ -121,20 +173,11 @@ void OSPFSendHello()
 
 	gpacket_t *out_pkt = (gpacket_t *) malloc(sizeof(gpacket_t));
 	ip_packet_t *ipkt = (ip_packet_t *)(out_pkt->data.data);
-	ipkt->ip_hdr_len = 5;                                  // no IP header options!!
+	ipkt->ip_hdr_len = 5; // size of IP header with NO options!!
 	ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4); //jumping ptr to end of ip header
-	uint16_t cksum;
-	uchar *dataptr; //ptr to data 
-
-	/* craft OSPF Header */
-	ospfhdr->version = 2; //always 2
-	ospfhdr->area_id = 0; //always 0
-	ospfhdr->cksum = 0; //TODO: compute checksum as IP does.
-	ospfhdr->authtype = 0; // always 0
-	//ospfhdr->auth always NULL
 
 	/* craft HELLO Message */
-	ospfhdr->type = OSPF_HELLO_MESSAGE; //set type
+	//ospfhdr->type = OSPF_HELLO_MESSAGE; //set type
 
 	ospf_hello_t *hellomsg = (ospf_hello_t *)((uchar *)ospfhdr + OSPF_HEADER_SIZE);
 	
@@ -187,9 +230,12 @@ void OSPFSendHello()
 	}
 
 	//set total pkt_len on OSPF common header
-	ospfhdr->pkt_len = OSPF_HEADER_SIZE + OSPF_HELLO_MSG_SIZE + (num_of_neighbours*4) ; //each nbour ip is 4 bytes * #of nbours
+	int total_pkt_size = OSPF_HEADER_SIZE + OSPF_HELLO_MSG_SIZE + (num_of_neighbours*4) ; //each nbour ip is 4 bytes * #of nbours
 	
-	IPOutgoingBcastAllInterPkt(out_pkt, ospfhdr->pkt_len, 1, OSPF_PROTOCOL);
+	//builds ospf header and calculates chksum
+	craftCommonOSPFHeader(ospfhdr, total_pkt_size, OSPF_HELLO_MESSAGE);
+
+	IPOutgoingBcastAllInterPkt(out_pkt, total_pkt_size, 1, OSPF_PROTOCOL);
 }
 
 /*
@@ -230,11 +276,11 @@ int addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr)
 	{
 		verbose(2, "[addNeighbourEntry]:: Either interface or neighbour IP are invalid \n");
 	}*/
-	int index; 
+	int index, retval; 
 	index = findNeighbourIndex(nbour_ip_addr);
 	if(index >= 0) {
 		verbose(2, "[addNeighbourEntry]:: neighbour %s already exist \n",IP2Dot(tmpbuf, nbour_ip_addr));
-		return 1; //we return 1, bc already exist, nothing changes
+		retval = 1; //we return 1, bc already exist, nothing changes
 	} else {
 		index = getEmptyIndex(nbours_tbl);
 		nbours_tbl[index].is_empty = FALSE;
@@ -243,9 +289,11 @@ int addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr)
 		}
 		COPY_IP(nbours_tbl[index].nbour_ip_addr, nbour_ip_addr);
 		verbose(2,"[addNeighbourEntry]:: added neighbour: %s \n", IP2Dot(tmpbuf, nbours_tbl[index].nbour_ip_addr));
+		retval = 0;
 	}
-
-	return 0;
+	//set or update timestamp of message received
+	gettimeofday(&nbours_tbl[index].tv, NULL);
+	return retval;
 }
 
 /*
