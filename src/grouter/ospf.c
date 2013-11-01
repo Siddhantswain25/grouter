@@ -118,6 +118,79 @@ void craftCommonOSPFHeader(ospfhdr_t *ospfhdr, int ospf_pkt_size, int pkt_type)
 
 void OSPFSendLSA() {
 	printf("[OSPFSendLSA]:: Not Implemented -> broadcast LSA");
+
+	verbose(2, "[OSPFSendLSA]:: Broadcasting LSA Message");
+
+	char tmpbuf[MAX_TMPBUF_LEN];
+
+	gpacket_t *out_pkt = (gpacket_t *) malloc(sizeof(gpacket_t));
+	ip_packet_t *ipkt = (ip_packet_t *)(out_pkt->data.data);
+	ipkt->ip_hdr_len = 5; // size of IP header with NO options!!
+	ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4); //jumping ptr to end of ip header
+
+	/* craft LSA Message */
+
+	/*LSA Header*/
+	ospf_lsa_hdr_t *lsa_hdr = (ospf_lsa_hdr_t *)((uchar *)ospfhdr + OSPF_HEADER_SIZE);
+	lsa_hdr->age = 0;
+	lsa_hdr->type = 1;
+	//lsa_hdr->link_state_id and ads_router set on next step
+	lsa_hdr->seq_num = 0;
+	lsa_hdr->cksum = 0;
+
+	/*LSA links*/
+
+	nbour_entry_t my_nbours[MAX_INTERFACES];
+	int num_of_neighbours, i = 0;
+	num_of_neighbours = findAllNeighbours(my_nbours); //get all neighbours
+
+	//move these to DEFINE const.
+	int lsa_hdr_length = 20; //20 bytes
+	int ls_update_length = 4; //4bytes
+	int one_link_length = 16; //16 bytes
+	//END mode to DEFINE const
+
+	//set lsa message total length
+	int ls_length = lsa_hdr_length + ls_update_length +(one_link_length * num_of_neighbours);
+	ospf_ls_update_t *lsupdate = (ospf_ls_update_t *)((uchar *)lsa_hdr + lsa_hdr_length);
+
+	lsupdate->word = 0; //always 0, not specified on RFC
+	lsupdate->num_links = num_of_neighbours;
+
+	uchar link_id_ip[4];
+	//adding any-to-any links
+	if (num_of_neighbours > 0)
+	{
+		for (i = 0; i < num_of_neighbours; i++)
+		{
+			ospf_link_t *link = (ospf_link_t *) malloc(sizeof(ospf_link_t));
+
+			printf("[OSPFSendLSA]:: adding neighbour : %s \n", IP2Dot(tmpbuf, my_nbours[i].nbour_ip_addr));
+			COPY_IP(link_id_ip, my_nbours[i].nbour_ip_addr);
+			link_id_ip[0] = IP_ZERO_PREFIX;
+			COPY_IP(link->link_id, gHtonl(tmpbuf, link_id_ip)); 
+			//lsupdate->link_id //network address = neighbour IP with last byte = 0, eg.192.168.2.0
+			
+			//get interface router ip address 
+			//lsupdate->link_data //router IP sending LSA
+			COPY_IP(link->link_data, my_nbours[i].iface_ip_addr);
+			link->metric = 1;
+			link->empty = 0;
+			link->empty2 = 0;
+			link->link_type = 2; //these are all any-to-any = 2
+			lsupdate->links[i] = (*link); //NOT SURE IF THIS IS WORKING
+		}
+	}
+
+	//set total pkt_len on OSPF common header
+	int total_pkt_size = OSPF_HEADER_SIZE + OSPF_HELLO_MSG_SIZE + ls_length ; //each nbour ip is 4 bytes * #of nbours
+	
+	//builds ospf header and calculates chksum
+	craftCommonOSPFHeader(ospfhdr, total_pkt_size, OSPF_HELLO_MESSAGE);
+
+	IPOutgoingBcastAllInterPkt(out_pkt, total_pkt_size, 1, OSPF_PROTOCOL);
+
+
 }
 
 void OSPFSendHelloThread() {
@@ -329,6 +402,23 @@ int findAllNeighboursIPs(uchar buf[][4])
 	}
 
 	verbose(2, "[findAllNeighboursIPs]:: output buffer with %d IPs",count);
+	return count;
+}
+
+int findAllNeighbours(nbour_entry_t buf[])
+{
+	int i, count = 0;
+	char tmpbuf[MAX_TMPBUF_LEN];
+
+	for (i = 0; i < MAX_INTERFACES; i++){
+		if (nbours_tbl[i].is_empty == FALSE)
+		{
+			//memcpy(buf[count], nbours_tbl[i], sizeof(nbour_entry_t)); THIS IS NOT WORKING!!!!
+			count++;
+		}
+	}
+
+	verbose(2, "[findAllNeighbours]:: output buffer with %d neighbours",count);
 	return count;
 }
 
