@@ -27,14 +27,14 @@ void OSPFInit()
 	if (threadstat != 0)
 	{
 		verbose(1, "[OSPFInit]:: unable to create Hello Message thread ...");
-		return EXIT_FAILURE;
+		//return EXIT_FAILURE;
 	}
 
 	threadstat = pthread_create((pthread_t *)&threadid2, NULL, (void *)OSPFNeighbourLivenessChecker, (void *)NULL);
 	if (threadstat != 0)
 	{
 		verbose(1, "[OSPFInit]:: unable to create Hello Message thread ...");
-		return EXIT_FAILURE;
+		//return EXIT_FAILURE;
 	}
 }
 
@@ -61,7 +61,7 @@ void OSPFProcessPacket(gpacket_t *in_pkt)
 
 void OSPFProcessHelloMessage(gpacket_t *in_pkt)
 {
-	verbose(1, "[OSPFProcessHelloMessage]:: Received Hello Message. processing... \n");
+	verbose(2, "[OSPFProcessHelloMessage]:: Received Hello Message. processing... \n");
 	char tmpbuf[MAX_TMPBUF_LEN];
 	ip_packet_t *ip_pkt = (ip_packet_t *)in_pkt->data.data;
 	ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
@@ -151,11 +151,11 @@ void OSPFNeighbourLivenessChecker()
 			{
 				gettimeofday(&second, NULL);
 				elapsed_time = subTimeVal(&second, &nbours_tbl[i].tv);
-				printf("Received hello %6.3f ms ago from %s\n", elapsed_time, IP2Dot(tmpbuf,  nbours_tbl[i].nbour_ip_addr));
+				verbose(3,"Received hello %6.3f ms ago from %s\n", elapsed_time, IP2Dot(tmpbuf,  nbours_tbl[i].nbour_ip_addr));
 				//COPY_IP(buf[count], nbours_tbl[i].nbour_ip_addr);
 				if(elapsed_time > 40000){
 					deleteNeighbourEntry(nbours_tbl[i].nbour_ip_addr);
-					printf("Neighbour %s is dead. deleting...", IP2Dot(tmpbuf,  nbours_tbl[i].nbour_ip_addr));
+					verbose(3,"Neighbour %s is dead. deleting...", IP2Dot(tmpbuf,  nbours_tbl[i].nbour_ip_addr));
 				}
 
 			}
@@ -201,25 +201,6 @@ void OSPFSendHello()
 	int num_of_neighbours, i = 0;
 	num_of_neighbours = findAllNeighboursIPs(list_nbours);
 
-	//just for testing DELETE AFTER
-	/*if(num_of_neighbours == 0) {
-		uchar *temp = "192.168.2.128"; //for debug
-		uchar iface[4];
-		Dot2IP(temp,iface);
-		
-		uchar *temp2 = "192.168.2.129"; //for debug
-		uchar nbour[4];
-		Dot2IP(temp2,nbour);
-
-		uchar *temp3 = "192.168.2.130"; //for debug
-		uchar nbour2[4];
-		Dot2IP(temp3,nbour2);
-
-		addNeighbourEntry(iface, nbour);
-		addNeighbourEntry(iface, nbour2);
-		num_of_neighbours = findAllNeighboursIPs(list_nbours);
-	}*/
-
 	if (num_of_neighbours > 0)
 	{
 		for (i = 0; i < num_of_neighbours; i++)
@@ -228,7 +209,6 @@ void OSPFSendHello()
 			COPY_IP(hellomsg->nbours_addr[i], list_nbours[i]);
 		}
 	}
-
 	//set total pkt_len on OSPF common header
 	int total_pkt_size = OSPF_HEADER_SIZE + OSPF_HELLO_MSG_SIZE + (num_of_neighbours*4) ; //each nbour ip is 4 bytes * #of nbours
 	
