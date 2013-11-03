@@ -70,5 +70,8 @@ void printUDPPacket(gpacket_t *msg);
 void printTCPPacket(gpacket_t *msg);
 void printOSPFHelloPacket(gpacket_t *msg);
 void printOSPFPacket(gpacket_t *msg);
+void printLSAHeader(gpacket_t *msg);
+void printLSUpdate(gpacket_t *msg);
+
 
 #endif
