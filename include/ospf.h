@@ -92,6 +92,7 @@ typedef struct _nbour_entry_t
 {
 	bool is_empty;                     	// indicate entry used or not
 	bool bidirectional;                 // bidirectional value, 0=no, 1=yes
+	bool is_stub;						// if ip address represents a stub network: 0 = no, i = yes
 	uchar nbour_ip_addr[4];				// neighbour ip address
 	uchar iface_ip_addr[4];				// interface ip address
 	struct timeval tv;					//time value of last hello message received
@@ -118,5 +119,6 @@ int isNeighbourBidirectional(uchar *nbour_ip_addr);
 int getEmptyIndex();
 void printNeighboursTable();
 int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag);
+int setStubToTrueFlag(uchar *nbour_ip_addr);
 
 #endif

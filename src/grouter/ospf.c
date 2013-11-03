@@ -320,6 +320,22 @@ int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag) {
 }
 
 /*
+ * set bidirectional flag to true if entry for that neighbour ip address already exist in the neighbour table
+ * return 1 if already exist, return 0 if no entry exists
+ */
+int setStubToTrueFlag(uchar *nbour_ip_addr){
+	int index; 
+	char tmpbuf[MAX_TMPBUF_LEN];
+	verbose(2, "[setStubFlag]:: Flipping Stub flag for : %s \n",IP2Dot(tmpbuf, nbour_ip_addr));
+	index = findNeighbourIndex(nbour_ip_addr);
+	if(index >= 0) {
+		nbours_tbl[index].is_stub = 1;
+		return 1; //we return 1, bc changed is good
+	} 
+	return 0;
+}
+
+/*
  * add neighbour entry, update bidirectional property if we already had it entry.
  * return 1 if already exist
  */
@@ -350,6 +366,8 @@ int addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr)
 	gettimeofday(&nbours_tbl[index].tv, NULL);
 	return retval;
 }
+
+
 
 /*
  * delete the MTU entry that corresponds to the given index from
