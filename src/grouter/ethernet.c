@@ -104,7 +104,7 @@ void* fromEthernetDev(void *arg)
 
 
 		//FOR OSPF
-		uchar *valMac1[MAX_TMPBUF_LEN];
+		/*uchar *valMac1[MAX_TMPBUF_LEN];
 		uchar *valMac2[MAX_TMPBUF_LEN];
 		uchar *valMac3[MAX_TMPBUF_LEN];
 		char *test1 = "33:33:00:00:00:16";
@@ -125,7 +125,7 @@ void* fromEthernetDev(void *arg)
 			}
 
 			setStubToTrueFlag(in_pkt->frame.src_ip_addr);
-		}
+		}*/
 		
 		// check whether the incoming packet is a layer 2 broadcast or
 		// meant for this node... otherwise should be thrown..
