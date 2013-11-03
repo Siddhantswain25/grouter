@@ -118,6 +118,9 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 
 	verbose(2, "[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d", IP2Dot(tmpbuf2, src_ip), seqNo);
 
+	//TODO remove me!!
+	printOSPFPacket(in_pkt);
+
 	// Check if we've seen this advertisement.
 	seq_num_entry_t *cur = seq_num_tbl->head;
 	while(cur != NULL) {
@@ -129,9 +132,7 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 		verbose(2, "[OSPFProcessLSA]:: First time seeing LSA from this IP");
 		seq_num_entry_t *newentry = (seq_num_entry_t *) malloc(sizeof(seq_num_entry_t));
 		newentry->seq_num = seqNo;
-		// Copy src_ip
-		int i;
-		for (i = 0; i < 4; i++) newentry->src_ip[i] = src_ip[i];
+		COPY_IP(newentry->src_ip, src_ip);
 
 		if (seq_num_tbl->head == NULL) {
 			// List is empty
@@ -195,52 +196,49 @@ void OSPFSendLSA() {
 	int num_of_neighbours, i = 0;
 	num_of_neighbours = findAllNeighbours(my_nbours); //get all neighbours
 
-	//move these to DEFINE const.
-	int lsa_hdr_length = 20; //20 bytes
-	int ls_update_length = 4; //4bytes
-	int one_link_length = 16; //16 bytes
-	//END mode to DEFINE const
+
 
 	//set lsa message total length
-	int ls_length = lsa_hdr_length + ls_update_length
-			+ (one_link_length * num_of_neighbours);
+	int ls_length = OSPF_LSA_HEADER_SIZE + OSPF_LS_UPDATE_SIZE
+			+ (OSPF_LINK_SIZE * num_of_neighbours);
 	ospf_ls_update_t *lsupdate = (ospf_ls_update_t *) ((uchar *) lsa_hdr
-			+ lsa_hdr_length);
+			+ OSPF_LSA_HEADER_SIZE);
 
 	lsupdate->word = 0; //always 0, not specified on RFC
 	lsupdate->num_links = num_of_neighbours;
 
 	uchar link_id_ip[4];
 	//adding any-to-any links
-	if (num_of_neighbours > 0) {
-		for (i = 0; i < num_of_neighbours; i++) {
-			ospf_link_t *link = (ospf_link_t *) malloc(sizeof(ospf_link_t));
+	for (i = 0; i < num_of_neighbours; i++) {
+		lsupdate->links[i] = (ospf_link_t *) malloc(sizeof(ospf_link_t));
 
-			printf("[OSPFSendLSA]:: adding neighbour : %s \n",
-					IP2Dot(tmpbuf, my_nbours[i].nbour_ip_addr));
-			COPY_IP(link_id_ip, my_nbours[i].nbour_ip_addr);
-			link_id_ip[0] = IP_ZERO_PREFIX;
-			COPY_IP(link->link_id, gHtonl(tmpbuf, link_id_ip));
-			//lsupdate->link_id //network address = neighbour IP with last byte = 0, eg.192.168.2.0
+		printf("[OSPFSendLSA]:: adding neighbour : %s \n",
+				IP2Dot(tmpbuf, my_nbours[i].nbour_ip_addr));
+		COPY_IP(link_id_ip, my_nbours[i].nbour_ip_addr);
+		link_id_ip[0] = IP_ZERO_PREFIX;
+		COPY_IP(lsupdate->links[i]->link_id, gHtonl(tmpbuf, link_id_ip));
+		//lsupdate->link_id //network address = neighbour IP with last byte = 0, eg.192.168.2.0
 
-			//get interface router ip address 
-			//lsupdate->link_data //router IP sending LSA
-			COPY_IP(link->link_data, my_nbours[i].iface_ip_addr);
-			link->metric = 1;
-			link->empty = 0;
-			link->empty2 = 0;
-			link->link_type = 2; //these are all any-to-any = 2
-			lsupdate->links[i] = (*link); //NOT SURE IF THIS IS WORKING
-		}
+		//get interface router ip address
+		//lsupdate->link_data //router IP sending LSA
+		COPY_IP(lsupdate->links[i]->link_data, my_nbours[i].iface_ip_addr);
+		lsupdate->links[i]->metric = 1;
+		lsupdate->links[i]->empty = 0;
+		lsupdate->links[i]->empty2 = 0;
+
+		// TODO handle stub networks.
+		lsupdate->links[i]->link_type = 2; //these are all any-to-any = 2
+
+		//memcpy(lsupdate->links[i], link, sizeof(ospf_link_t)); //NOT SURE IF THIS IS WORKING
 	}
 
-	//set total pkt_len on OSPF common header
-	int total_pkt_size = OSPF_HEADER_SIZE + OSPF_HELLO_MSG_SIZE + ls_length; //each nbour ip is 4 bytes * #of nbours
+//	//set total pkt_len on OSPF common header
+//	int total_pkt_size = OSPF_HEADER_SIZE + OSPF_LSA_HEADER_SIZE + ls_length; //each nbour ip is 4 bytes * #of nbours
 
 	//builds ospf header and calculates chksum
-	craftCommonOSPFHeader(ospfhdr, total_pkt_size, OSPF_HELLO_MESSAGE);
+	craftCommonOSPFHeader(ospfhdr, ls_length, OSPF_LINK_STATUS_UPDATE);
 
-	IPOutgoingBcastAllInterPkt(out_pkt, total_pkt_size, 1, OSPF_PROTOCOL);
+	IPOutgoingBcastAllInterPkt(out_pkt, ls_length, 1, OSPF_PROTOCOL);
 
 }
 

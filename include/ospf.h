@@ -21,6 +21,8 @@
 #define OSPF_HEADER_SIZE		 24		//24 bytes
 #define OSPF_HELLO_MSG_SIZE		 20     //20 bytes, without neighbours IP addresses
 #define OSPF_LSA_HEADER_SIZE	 20		//20 byte header
+#define OSPF_LS_UPDATE_SIZE		 4		// 4 bytes in update excluding links
+#define OSPF_LINK_SIZE			 16		// 16 bytes per link advertised
 #define OSPF_NETMASK_ADDR        {0x00, 0xFF, 0xFF, 0xFF}
 #define OSPF_ZERO_ADDR			 {0x00, 0x00, 0x00, 0x00}
 /*
@@ -83,7 +85,7 @@ typedef struct _ospf_ls_update_t
 {
 	uint16_t word; 							//not on RFC.
 	uint16_t num_links;						//numbers of links on this message
-	ospf_link_t links[MAX_INTERFACES];	//list of neighbours
+	ospf_link_t **links;						//list of neighbours
 } ospf_ls_update_t;
 
 /*
