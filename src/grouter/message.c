@@ -150,10 +150,10 @@ void printLSUpdate(gpacket_t *msg) {
 	int i;
 	for (i = 0; i < lsupdate->num_links; i++) {
 		ospf_link_t link = lsupdate->links[i];
-		printf("\n\tLink ID				: %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, link->link_id)));
-		printf("\tLink Data				: %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, link->link_data)));
-		printf("\tLink Type				: %d\n", link->link_type);
-		printf("\tLink Metric			: %d\n", link->metric);
+		printf("\n\tLink ID				: %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, link.link_id)));
+		printf("\tLink Data				: %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, link.link_data)));
+		printf("\tLink Type				: %d\n", link.link_type);
+		printf("\tLink Metric			: %d\n", link.metric);
 	}
 }
 

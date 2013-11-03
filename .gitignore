@@ -2,3 +2,5 @@
 *.sublime*
 .cproject
 .project
+src/grouter/.sconsign.dblite
+src/grouter/grouter
