@@ -114,6 +114,47 @@ void printOSPFPacket(gpacket_t *msg)
 	if(ospfhdr->type == OSPF_HELLO_MESSAGE) {
 		printOSPFHelloPacket(msg);
 	}
+	else if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE) {
+		printLSAHeader(msg);
+		printLSUpdate(msg);
+	}
+}
+
+void printLSAHeader(gpacket_t *msg) {
+	char tmpbuf[MAX_TMPBUF_LEN];
+	ip_packet_t *ipkt = (ip_packet_t *)msg->data.data;
+	ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4);
+	ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *) ((uchar *)ospfhdr + OSPF_HEADER_SIZE);
+	printf("OSPF: ----- OSPF LSA Header -----\n");
+	printf("OSPF: Age   				: %d\n", lsahdr->age);
+	printf("OSPF: Type        			: %d\n", lsahdr->type);
+	printf("OSPF: Link State ID         : %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, lsahdr->link_state_id)));
+	printf("OSPF: Advertising Router   	: %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, lsahdr->ads_router)));
+	printf("OSPF: Sequence Number       : %d\n", lsahdr->seq_num);
+	printf("OSPF: Checksum     			: %d\n", lsahdr->cksum);
+	printf("OSPF: Length      			: %d\n", lsahdr->ls_length);
+}
+
+void printLSUpdate(gpacket_t *msg) {
+	char tmpbuf[MAX_TMPBUF_LEN];
+	ip_packet_t *ipkt = (ip_packet_t *)msg->data.data;
+	ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ipkt + ipkt->ip_hdr_len*4);
+	ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *) ((uchar *)ospfhdr + OSPF_HEADER_SIZE);
+	ospf_ls_update_t *lsupdate = (ospf_ls_update_t *) ((uchar *)lsahdr + OSPF_LSA_HEADER_SIZE);
+
+	printf("OSPF: ----- OSPF LS Update -----\n");
+	printf("OSPF: Word   				: %d\n", lsupdate->word);
+	printf("OSPF: Number of Links		: %d\n", lsupdate->num_links);
+	printf("OSPF: Links					:\n");
+
+	int i;
+	for (i = 0; i < lsupdate->num_links; i++) {
+		ospf_link_t link = lsupdate->links[i];
+		printf("\n\tLink ID				: %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, link->link_id)));
+		printf("\tLink Data				: %s\n", IP2Dot(tmpbuf, gNtohl(tmpbuf+20, link->link_data)));
+		printf("\tLink Type				: %d\n", link->link_type);
+		printf("\tLink Metric			: %d\n", link->metric);
+	}
 }
 
 void printOSPFHelloPacket(gpacket_t *msg) {

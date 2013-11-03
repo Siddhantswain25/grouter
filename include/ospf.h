@@ -20,6 +20,7 @@
 #define OSPF_LINK_STATUS_UPDATE  4      //Link status update = Link state advertisement
 #define OSPF_HEADER_SIZE		 24		//24 bytes
 #define OSPF_HELLO_MSG_SIZE		 20     //20 bytes, without neighbours IP addresses
+#define OSPF_LSA_HEADER_SIZE	 20		//20 byte header
 #define OSPF_NETMASK_ADDR        {0x00, 0xFF, 0xFF, 0xFF}
 #define OSPF_ZERO_ADDR			 {0x00, 0x00, 0x00, 0x00}
 /*
@@ -96,6 +97,23 @@ typedef struct _nbour_entry_t
 	uchar iface_ip_addr[4];				// interface ip address
 	struct timeval tv;					//time value of last hello message received
 } nbour_entry_t;
+
+/*
+ * For keeping track of sequence numbers seen so far.
+ * One such entry for each IP sending us LS updates.
+ */
+typedef struct _seq_num_entry_t
+{
+	uint32_t seq_num;					// Latest sequence number we've received
+	uchar src_ip[4];					// IP that we received this sequence number from
+	struct _seq_num_entry_t *next;	// next entry in list
+} seq_num_entry_t;
+
+typedef struct _seq_num_tbl_t
+{
+	seq_num_entry_t *head;
+	seq_num_entry_t *tail;
+} seq_num_tbl_t;
 
 
 void OSPFInit();
