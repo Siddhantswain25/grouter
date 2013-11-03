@@ -121,10 +121,10 @@ void* fromEthernetDev(void *arg)
 
 			if(index == -1)
 			{
-				addNeighbourEntry(in_pkt->frame.dst_interface, in_pkt->frame.src_ip_address);
+				addNeighbourEntry(in_pkt->frame.dst_interface, in_pkt->frame.src_ip_addr);
 			}
 
-			setStubToTrueFlag(in_pkt->frame.src_ip_address);
+			setStubToTrueFlag(in_pkt->frame.src_ip_addr);
 		}
 		
 		// check whether the incoming packet is a layer 2 broadcast or
