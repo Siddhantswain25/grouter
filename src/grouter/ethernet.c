@@ -15,6 +15,7 @@
 #include "gnet.h"
 #include "arp.h"
 #include "ip.h"
+#include "ospf.h"
 #include <netinet/in.h>
 #include <stdlib.h>
 
@@ -100,6 +101,32 @@ void* fromEthernetDev(void *arg)
 		bzero(in_pkt, sizeof(gpacket_t));
 		vpl_recvfrom(iface->vpl_data, &(in_pkt->data), sizeof(pkt_data_t));
 		pthread_testcancel();
+
+
+		//FOR OSPF
+		uchar *valMac1[MAX_TMPBUF_LEN];
+		uchar *valMac2[MAX_TMPBUF_LEN];
+		uchar *valMac3[MAX_TMPBUF_LEN];
+		char *test1 = "33:33:00:00:00:16";
+		char *test2 = "33:33:00:00:00:02";
+		char *test3 = "33:33:ff:00:00:04";
+		Colon2MAC(*valMac1, test1);
+		Colon2MAC(*valMac2, test2);
+		Colon2MAC(*valMac3, test3);
+		if(COMPARE_MAC(in_pkt->data.header.dst, valMac1) == 0 || COMPARE_MAC(in_pkt->data.header.dst, valMac2) == 0
+		 || COMPARE_MAC(in_pkt->data.header.dst, valMac3) == 0){
+			//Then we know that this packet comes from a stub network
+			//Set stub bit in neighbour table to true
+			int index = findNeighbourIndex(in_pkt->frame.src_ip_addr);
+
+			if(index == -1)
+			{
+				addNeighbourEntry(in_pkt->frame.dst_interface, in_pkt->frame.src_ip_address);
+			}
+
+			setStubToTrueFlag(in_pkt->frame.src_ip_address);
+		}
+		
 		// check whether the incoming packet is a layer 2 broadcast or
 		// meant for this node... otherwise should be thrown..
 		// TODO: fix for promiscuous mode packet snooping.
