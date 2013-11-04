@@ -85,7 +85,7 @@ typedef struct _ospf_ls_update_t
 {
 	uint16_t word; 							//not on RFC.
 	uint16_t num_links;						//numbers of links on this message
-	ospf_link_t **links;						//list of neighbours
+	ospf_link_t links[MAX_INTERFACES];		//list of neighbours
 } ospf_ls_update_t;
 
 /*
@@ -112,12 +112,6 @@ typedef struct _seq_num_entry_t
 	struct _seq_num_entry_t *next;	// next entry in list
 } seq_num_entry_t;
 
-typedef struct _seq_num_tbl_t
-{
-	seq_num_entry_t *head;
-	seq_num_entry_t *tail;
-} seq_num_tbl_t;
-
 
 void OSPFInit();
 void OSPFProcessPacket(gpacket_t *in_pkt);
@@ -140,5 +134,6 @@ int getEmptyIndex();
 void printNeighboursTable();
 int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag);
 int setStubToTrueFlag(uchar *nbour_ip_addr);
+void printSeqNumTable();
 
 #endif

@@ -14,7 +14,7 @@
 
 //extern mtu_entry_t MTU_tbl[MAX_MTU];
 nbour_entry_t nbours_tbl[MAX_INTERFACES];
-seq_num_tbl_t *seq_num_tbl;
+seq_num_entry_t *seq_num_tbl;
 uint32_t mySeqNum = 0;
 
 void OSPFInit() {
@@ -103,56 +103,76 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 	//if nothing changes, do nothing
 }
 
+//TODO merge linked list stuff with graph in dijkstra if there's time.
 void OSPFProcessLSA(gpacket_t *in_pkt) {
 	verbose(2, "[OSPFProcessLSA]:: processing incoming LSA packet...");
 
 	char src_ip_buf[MAX_TMPBUF_LEN];
-	char tmpbuf2[MAX_TMPBUF_LEN];
+	char tmpbuf[MAX_TMPBUF_LEN];
 	ip_packet_t *ip_pkt = (ip_packet_t *) in_pkt->data.data;
 	ospfhdr_t *ospfhdr = (ospfhdr_t *) ((uchar *) ip_pkt
 			+ ip_pkt->ip_hdr_len * 4);
-	ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *) ((uchar *) ospfhdr + OSPF_HEADER_SIZE);
-	ospf_ls_update_t *lsa = (ospf_ls_update_t *) ((uchar *) lsahdr + OSPF_LSA_HEADER_SIZE);
+	ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *) ((uchar *) ospfhdr
+			+ OSPF_HEADER_SIZE);
+	ospf_ls_update_t *lsa = (ospf_ls_update_t *) ((uchar *) lsahdr
+			+ OSPF_LSA_HEADER_SIZE);
 	int seqNo = lsahdr->seq_num;
-	uchar *src_ip = gNtohl(src_ip_buf, ip_pkt->ip_src);
+	uchar *src_ip = gNtohl(src_ip_buf, lsahdr->ads_router);
 
-	verbose(2, "[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d", IP2Dot(tmpbuf2, src_ip), seqNo);
+	verbose(2,
+			"[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d",
+			IP2Dot(tmpbuf, src_ip), seqNo);
 
-	//TODO remove me!!
-	printOSPFPacket(in_pkt);
+	printf(
+			"[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
+			IP2Dot(tmpbuf, src_ip), seqNo);
 
 	// Check if we've seen this advertisement.
-	seq_num_entry_t *cur = seq_num_tbl->head;
-	while(cur != NULL) {
-		if (COMPARE_IP(cur->src_ip, src_ip)) break;
+	seq_num_entry_t *cur = seq_num_tbl;
+	while (cur != NULL) {
+		if (!COMPARE_IP(cur->src_ip, src_ip))
+			break;
 		cur = cur->next;
 	}
-	if (cur == NULL) {
-		// Add this entry to table
-		verbose(2, "[OSPFProcessLSA]:: First time seeing LSA from this IP");
-		seq_num_entry_t *newentry = (seq_num_entry_t *) malloc(sizeof(seq_num_entry_t));
-		newentry->seq_num = seqNo;
-		COPY_IP(newentry->src_ip, src_ip);
+	if (cur == NULL || cur->seq_num < seqNo) {
+		// We haven't seen this LSA yet
+		printf("[OSPFProcessLSA]:: Haven't seen this LSA before\n");
+		if (cur == NULL) {
+			// Add this entry to table
+			printf("[OSPFProcessLSA]:: Haven't received from this sender yet\n");
+			cur = malloc(sizeof(seq_num_entry_t));
+			COPY_IP(cur->src_ip, src_ip);
+			cur->seq_num = seqNo;
 
-		if (seq_num_tbl->head == NULL) {
-			// List is empty
-			seq_num_tbl->head = newentry;
-			seq_num_tbl->tail = newentry;
-		} else {
-			seq_num_tbl->tail->next = newentry;
-			seq_num_tbl->tail = seq_num_tbl->tail->next;
+			if (seq_num_tbl == NULL) {
+				// List is empty
+				cur->next = NULL;
+				seq_num_tbl = cur;
+			} else {
+				// Insert at head of list
+				cur->next = seq_num_tbl;
+				seq_num_tbl = cur;
+			}
+			printf("Inserted cur: IP=%s, seqNo=%d\n", IP2Dot(tmpbuf + 100, cur->src_ip),
+							cur->seq_num);
 		}
-	}
-	else if (cur->seq_num < seqNo) {
-		cur->seq_num = seqNo;
-		verbose(2, "[OSPFProcessLSA]:: Not implemented: run Dijkstra, update fwd table");
+		else {
+			// We've received from this sender, but this is a new LSA.
+			printf("[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
+			cur->seq_num = seqNo;
+		}
+
+
+		// Broadcast the packet (starting at OSPF header)
+		printf("Broadcasting this packet\n");
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 1, OSPF_PROTOCOL);
 
-		// TODO parse links, update graph & run dijkstra & update forwarding table if necessary.
+		//TODO parse links, update graph & run dijkstra & update forwarding table if necessary.
+
 	}
-
-	// Else, already seen this message, do nothing (i.e. drop packet).
-
+	else {
+		printf("******Received duplicate packet, not broadcasting!\n");
+	}
 }
 
 void craftCommonOSPFHeader(ospfhdr_t *ospfhdr, int ospf_pkt_size, int pkt_type) {
@@ -167,40 +187,37 @@ void craftCommonOSPFHeader(ospfhdr_t *ospfhdr, int ospf_pkt_size, int pkt_type) 
 }
 
 void OSPFSendLSA() {
-	printf("[OSPFSendLSA]:: Not Implemented -> broadcast LSA");
-
 	verbose(2, "[OSPFSendLSA]:: Broadcasting LSA Message");
-
-	char tmpbuf[MAX_TMPBUF_LEN];
 
 	gpacket_t *out_pkt = (gpacket_t *) malloc(sizeof(gpacket_t));
 	ip_packet_t *ipkt = (ip_packet_t *) (out_pkt->data.data);
 	ipkt->ip_hdr_len = 5; // size of IP header with NO options!!
 	ospfhdr_t *ospfhdr = (ospfhdr_t *) ((uchar *) ipkt + ipkt->ip_hdr_len * 4); //jumping ptr to end of ip header
 
-	/* craft LSA Message */
+	// Get all neighbors
+	nbour_entry_t my_nbours[MAX_INTERFACES];
+	int num_of_neighbours, i = 0;
+	num_of_neighbours = findAllNeighbours(my_nbours);
+
+	// set LSA message payload total length (lenght in LSA header)
+	int lsa_length = OSPF_LS_UPDATE_SIZE + num_of_neighbours * OSPF_LINK_SIZE;
+	//set OSPF message payload total length (length in OSPF header)
+	int total_length = OSPF_LSA_HEADER_SIZE + lsa_length;
 
 	/*LSA Header*/
+
 	ospf_lsa_hdr_t *lsa_hdr = (ospf_lsa_hdr_t *) ((uchar *) ospfhdr
 			+ OSPF_HEADER_SIZE);
 	lsa_hdr->age = 0;
 	lsa_hdr->type = 1;
-	//lsa_hdr->link_state_id and ads_router set on next step
+	//lsa_hdr->link_state_id and ads_router set when broadcasting
 	lsa_hdr->seq_num = mySeqNum;
 	mySeqNum++;
 	lsa_hdr->cksum = 0;
+	lsa_hdr->ls_length = lsa_length;
 
 	/*LSA links*/
 
-	nbour_entry_t my_nbours[MAX_INTERFACES];
-	int num_of_neighbours, i = 0;
-	num_of_neighbours = findAllNeighbours(my_nbours); //get all neighbours
-
-
-
-	//set lsa message total length
-	int ls_length = OSPF_LSA_HEADER_SIZE + OSPF_LS_UPDATE_SIZE
-			+ (OSPF_LINK_SIZE * num_of_neighbours);
 	ospf_ls_update_t *lsupdate = (ospf_ls_update_t *) ((uchar *) lsa_hdr
 			+ OSPF_LSA_HEADER_SIZE);
 
@@ -208,38 +225,38 @@ void OSPFSendLSA() {
 	lsupdate->num_links = num_of_neighbours;
 
 	uchar link_id_ip[4];
-	//adding any-to-any links
-	for (i = 0; i < num_of_neighbours; i++) {
-		lsupdate->links[i] = (ospf_link_t *) malloc(sizeof(ospf_link_t));
 
-		printf("[OSPFSendLSA]:: adding neighbour : %s \n",
-				IP2Dot(tmpbuf, my_nbours[i].nbour_ip_addr));
+	for (i = 0; i < num_of_neighbours; i++) {
+		char tmpbuf[MAX_TMPBUF_LEN];
+		ospf_link_t *curLink = &(lsupdate->links[i]);
+
 		COPY_IP(link_id_ip, my_nbours[i].nbour_ip_addr);
 		link_id_ip[0] = IP_ZERO_PREFIX;
-		COPY_IP(lsupdate->links[i]->link_id, gHtonl(tmpbuf, link_id_ip));
-		//lsupdate->link_id //network address = neighbour IP with last byte = 0, eg.192.168.2.0
 
-		//get interface router ip address
-		//lsupdate->link_data //router IP sending LSA
-		COPY_IP(lsupdate->links[i]->link_data, my_nbours[i].iface_ip_addr);
-		lsupdate->links[i]->metric = 1;
-		lsupdate->links[i]->empty = 0;
-		lsupdate->links[i]->empty2 = 0;
+		verbose(3, "[OSPFSendLSA]:: adding neighbour : %s \n",
+				IP2Dot(tmpbuf, link_id_ip));
 
-		// TODO handle stub networks.
-		lsupdate->links[i]->link_type = 2; //these are all any-to-any = 2
+		// link_id is the network of this link
+		COPY_IP(curLink->link_id, gHtonl(tmpbuf+20, link_id_ip));
+		// link_data is the netmask for stubs and router IP for any-to-any
+		// TODO handle stub case
+		COPY_IP(curLink->link_data,
+				gHtonl(tmpbuf+40, my_nbours[i].nbour_ip_addr));
+		curLink->metric = 1;
+		curLink->empty = 0;
+		curLink->empty2 = 0;
 
-		//memcpy(lsupdate->links[i], link, sizeof(ospf_link_t)); //NOT SURE IF THIS IS WORKING
+		// TODO handle stub case.
+		curLink->link_type = 2; //these are all any-to-any = 2
 	}
 
-//	//set total pkt_len on OSPF common header
-//	int total_pkt_size = OSPF_HEADER_SIZE + OSPF_LSA_HEADER_SIZE + ls_length; //each nbour ip is 4 bytes * #of nbours
-
 	//builds ospf header and calculates chksum
-	craftCommonOSPFHeader(ospfhdr, ls_length, OSPF_LINK_STATUS_UPDATE);
+	verbose(3, "[OSPFSendLSA]:: calling craftCommonOSPFHeader");
+	craftCommonOSPFHeader(ospfhdr, total_length, OSPF_LINK_STATUS_UPDATE);
 
-	IPOutgoingBcastAllInterPkt(out_pkt, ls_length, 1, OSPF_PROTOCOL);
-
+	verbose(3, "[OSPFSendLSA]:: sending to broadcast function");
+	IPOutgoingBcastAllInterPkt(out_pkt, total_length + OSPF_HEADER_SIZE, 1,
+			OSPF_PROTOCOL);
 }
 
 void OSPFSendHelloThread() {
@@ -373,15 +390,16 @@ int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag) {
  * set bidirectional flag to true if entry for that neighbour ip address already exist in the neighbour table
  * return 1 if already exist, return 0 if no entry exists
  */
-int setStubToTrueFlag(uchar *nbour_ip_addr){
-	int index; 
+int setStubToTrueFlag(uchar *nbour_ip_addr) {
+	int index;
 	char tmpbuf[MAX_TMPBUF_LEN];
-	verbose(2, "[setStubFlag]:: Flipping Stub flag for : %s \n",IP2Dot(tmpbuf, nbour_ip_addr));
+	verbose(2, "[setStubFlag]:: Flipping Stub flag for : %s \n",
+			IP2Dot(tmpbuf, nbour_ip_addr));
 	index = findNeighbourIndex(nbour_ip_addr);
-	if(index >= 0) {
+	if (index >= 0) {
 		nbours_tbl[index].is_stub = 1;
 		return 1; //we return 1, bc changed is good
-	} 
+	}
 	return 0;
 }
 
@@ -417,8 +435,6 @@ int addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr) {
 	gettimeofday(&nbours_tbl[index].tv, NULL);
 	return retval;
 }
-
-
 
 /*
  * delete the MTU entry that corresponds to the given index from
@@ -480,7 +496,7 @@ int findAllNeighbours(nbour_entry_t buf[]) {
 
 	for (i = 0; i < MAX_INTERFACES; i++) {
 		if (nbours_tbl[i].is_empty == FALSE) {
-			//memcpy(buf[count], nbours_tbl[i], sizeof(nbour_entry_t)); THIS IS NOT WORKING!!!!
+			buf[count] = nbours_tbl[i];
 			count++;
 		}
 	}
@@ -529,6 +545,22 @@ void printNeighboursTable() {
 			printf("%s\t", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
 			printf("%d\n", nbours_tbl[i].bidirectional);
 		}
+	}
+	printf("---------------------------------------------------------\n");
+	return;
+}
+
+void printSeqNumTable() {
+	char tmpbuf[MAX_TMPBUF_LEN];
+	printf("---------------------------------------------------------\n");
+	printf(" O S P F :  S E Q U E N C E   N U M B E R   T A B L E \n");
+	printf("---------------------------------------------------------\n");
+	printf("srcIP\tseqNo \n");
+	seq_num_entry_t *cur = seq_num_tbl;
+	while (cur != NULL) {
+		printf("%s\t", IP2Dot(tmpbuf, cur->src_ip));
+		printf("%d\n", cur->seq_num);
+		cur = cur->next;
 	}
 	printf("---------------------------------------------------------\n");
 	return;

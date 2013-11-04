@@ -381,10 +381,19 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 				ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
 				//set source IP on OSPF header
 				COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip[i]));
+				if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE) {
+					ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *)((uchar *)ospfhdr + OSPF_HEADER_SIZE);
+					//set link state ID & advertising router on LSA header
+
+					//FIXME this shouldn't happen if this is just a packet being forwarded!
+					COPY_IP(lsahdr->link_state_id, gHtonl(tmpbuf, iface_ip[i]));
+					COPY_IP(lsahdr->ads_router, gHtonl(tmpbuf, iface_ip[i]));
+				}
 				//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
 				
 			}
 			//send to outgoing with each dst_ip different
+
 			IPOutgoingPacket(cp_pkt, dst_ip, size, 1, OSPF_PROTOCOL);
 		}
 		return TRUE;
