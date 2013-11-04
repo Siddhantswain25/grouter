@@ -104,15 +104,15 @@ void* fromEthernetDev(void *arg)
 
 
 		//FOR OSPF
-		/*uchar *valMac1[MAX_TMPBUF_LEN];
-		uchar *valMac2[MAX_TMPBUF_LEN];
-		uchar *valMac3[MAX_TMPBUF_LEN];
+		uchar valMac1[6];
+		uchar valMac2[6];
+		uchar valMac3[6];
 		char *test1 = "33:33:00:00:00:16";
 		char *test2 = "33:33:00:00:00:02";
 		char *test3 = "33:33:ff:00:00:04";
-		Colon2MAC(*valMac1, test1);
-		Colon2MAC(*valMac2, test2);
-		Colon2MAC(*valMac3, test3);
+		Colon2MAC(test1, valMac1);
+		Colon2MAC(test2, valMac2);
+		Colon2MAC(test3, valMac3);
 		if(COMPARE_MAC(in_pkt->data.header.dst, valMac1) == 0 || COMPARE_MAC(in_pkt->data.header.dst, valMac2) == 0
 		 || COMPARE_MAC(in_pkt->data.header.dst, valMac3) == 0){
 			//Then we know that this packet comes from a stub network
@@ -125,7 +125,7 @@ void* fromEthernetDev(void *arg)
 			}
 
 			setStubToTrueFlag(in_pkt->frame.src_ip_addr);
-		}*/
+		}
 		
 		// check whether the incoming packet is a layer 2 broadcast or
 		// meant for this node... otherwise should be thrown..
