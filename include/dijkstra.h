@@ -1,3 +1,4 @@
+//
 ///*
 //* dijkstra.h --> header file for Dijkstra algorithm
 //*
@@ -9,6 +10,11 @@
 //#include "grouter.h"
 //
 //#define INFINITY	99999
+//
+////Predeclared Structs
+//typedef struct _Node Node;
+//typedef struct _Link Link;
+//typedef struct _NextHop NextHop;
 //
 ////------STRUCTS--------
 //typedef struct _Link{
@@ -40,13 +46,16 @@
 //
 //
 ////Predeclared Functions
-///*void printList(Node *list);
 //void printuchar(uchar ip[]);
 //char* getucharstr(uchar ip[]);
-//int length(Node *givenList);
-//void add(Router *rToAdd, Router *addToThisR);
+//Node* createNode(char *ip, int seq_Numb);
+//Link* createLink(char *linkId, char *linkData, int linkType);
+//int graphLength(Node *root);
+//int neighbourListLength(Node *node);
+//void addNextNode(Node **root, Node *node);
+//void addNeighbour(Node *node, Link *link);
+//void removeAllNeighbours(Node *node);
+//void printGraph(Node *node);
 //int getLowestDistance(int distance[], int observed[], int numbNodes);
-//int getNodeId(Router *router, Router routers[], int numbNodes);
 //int calcNextHop(int index, int distance[], int previousNode[]);
-//NextHop* calculateDijkstra(Router *root, Router *sourceRouter);
-//int test();*/
+////NextHop* calculateDijkstra(Router *root, Router *sourceRouter);
