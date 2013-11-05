@@ -394,7 +394,6 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 						COPY_IP(lsahdr->link_state_id, gHtonl(tmpbuf, iface_ip[i]));
 						COPY_IP(lsahdr->ads_router, gHtonl(tmpbuf, iface_ip[i]));
 					}
-					printGPacket(cp_pkt, 3, "IP_ROUTINE");
 				}
 				//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
 				
