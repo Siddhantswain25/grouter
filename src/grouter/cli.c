@@ -881,9 +881,6 @@ void ospfCmd()
 	} else if (!strcmp(next_tok, "-printneighbours") || !strcmp(next_tok, "-n")) {
 		printNeighboursTable();
 	}
-	else if (!strcmp(next_tok, "-printsequence") || !strcmp(next_tok, "-s")) {
-		printSeqNumTable();
-	}
 
 
 	/*if(type == 1) {

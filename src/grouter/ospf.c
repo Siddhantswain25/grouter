@@ -6,6 +6,7 @@
 #include "protocols.h"
 #include "ospf.h"
 #include "ip.h"
+#include "graph.h"
 #include <slack/err.h>
 #include <netinet/in.h>
 #include <sys/time.h>
@@ -14,7 +15,7 @@
 
 //extern mtu_entry_t MTU_tbl[MAX_MTU];
 nbour_entry_t nbours_tbl[MAX_INTERFACES];
-seq_num_entry_t *seq_num_tbl;
+Node *graph;
 uint32_t mySeqNum = 0;
 
 void OSPFInit() {
@@ -129,51 +130,68 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 			IP2Dot(tmpbuf, src_ip), seqNo);
 
 	// Check if we've seen this advertisement.
-	seq_num_entry_t *cur = seq_num_tbl;
-	while (cur != NULL) {
-		if (!COMPARE_IP(cur->src_ip, src_ip))
-			break;
-		cur = cur->next;
-	}
-	if (cur == NULL || cur->seq_num < seqNo) {
+	Node *found = getNodeByIP(graph, src_ip);
+	if (found == NULL || found->seq_Numb < seqNo) {
 		// We haven't seen this LSA yet
 		printf("[OSPFProcessLSA]:: Haven't seen this LSA before\n");
-		if (cur == NULL) {
-			// Add this entry to table
+		if (found == NULL) {
 			printf("[OSPFProcessLSA]:: Haven't received from this sender yet\n");
-			cur = malloc(sizeof(seq_num_entry_t));
-			COPY_IP(cur->src_ip, src_ip);
-			cur->seq_num = seqNo;
+			found = malloc(sizeof(Node));
+			COPY_IP(found->ip, src_ip);
+			found->seq_Numb = seqNo;
+			found->list = NULL;
+			parseLinks(lsa, found);
 
-			if (seq_num_tbl == NULL) {
-				// List is empty
-				cur->next = NULL;
-				seq_num_tbl = cur;
-			} else {
-				// Insert at head of list
-				cur->next = seq_num_tbl;
-				seq_num_tbl = cur;
-			}
-			printf("Inserted cur: IP=%s, seqNo=%d\n", IP2Dot(tmpbuf + 100, cur->src_ip),
-							cur->seq_num);
+			graph = addNode(graph, found);
+			printGraph(graph);
 		}
 		else {
 			// We've received from this sender, but this is a new LSA.
 			printf("[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
-			cur->seq_num = seqNo;
+			found->seq_Numb = seqNo;
+			parseLinks(lsa, found);
+			printGraph(graph);
 		}
 
 
-		// Broadcast the packet (starting at OSPF header)
+		// Broadcast the packet
 		printf("Broadcasting this packet\n");
 
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
-		//TODO parse links, update graph & run dijkstra & update forwarding table if necessary.
+		// TODO run dijkstra & update forwarding table if necessary.
 
 	}
 	else {
-		printf("******Received duplicate packet, not broadcasting!\n");
+		printf("Received duplicate packet, not broadcasting!\n");
+	}
+}
+
+/* Parse the links from update and add them as links in node. */
+void parseLinks(ospf_ls_update_t *update, Node *node) {
+	uchar tmpbuf[MAX_TMPBUF_LEN];
+
+	// Delete the previous links
+	Link *head = node->list;
+	Link *tmp;
+	while (head != NULL) {
+		tmp = head;
+		head = tmp->next;
+		free(tmp);
+	}
+	node->list = NULL;
+
+	// Add the new links
+	int i;
+	for (i = 0; i < update->num_links; i++) {
+		printf("[parseLinks]:: ADDING A LINK!\n");
+		ospf_link_t *curLink = &(update->links[i]);
+		Link *newLink = malloc(sizeof(Link));
+		COPY_IP(newLink->linkId, gNtohl(tmpbuf, curLink->link_id));
+		COPY_IP(newLink->linkData, gNtohl(tmpbuf+20, curLink->link_data));
+		newLink->linkType = curLink->link_type;
+
+		node->list = addLink(node->list, newLink);
 	}
 }
 
@@ -530,6 +548,7 @@ int getEmptyIndex() {
 			return i;
 		}
 	}
+	return -1;
 }
 
 /*
@@ -555,21 +574,5 @@ void printNeighboursTable() {
 		}
 	}
 	printf("-----------------------------------------------------------------\n");
-	return;
-}
-
-void printSeqNumTable() {
-	char tmpbuf[MAX_TMPBUF_LEN];
-	printf("---------------------------------------------------------\n");
-	printf(" O S P F :  S E Q U E N C E   N U M B E R   T A B L E \n");
-	printf("---------------------------------------------------------\n");
-	printf("srcIP\tseqNo \n");
-	seq_num_entry_t *cur = seq_num_tbl;
-	while (cur != NULL) {
-		printf("%s\t", IP2Dot(tmpbuf, cur->src_ip));
-		printf("%d\n", cur->seq_num);
-		cur = cur->next;
-	}
-	printf("---------------------------------------------------------\n");
 	return;
 }

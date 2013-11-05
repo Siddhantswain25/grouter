@@ -13,6 +13,7 @@
 #include "grouter.h"
 #include "message.h"
 #include "gnet.h"
+#include "graph.h"
 #include <stdint.h>
 #include <endian.h>
 
@@ -101,17 +102,6 @@ typedef struct _nbour_entry_t
 	struct timeval tv;					//time value of last hello message received
 } nbour_entry_t;
 
-/*
- * For keeping track of sequence numbers seen so far.
- * One such entry for each IP sending us LS updates.
- */
-typedef struct _seq_num_entry_t
-{
-	uint32_t seq_num;					// Latest sequence number we've received
-	uchar src_ip[4];					// IP that we received this sequence number from
-	struct _seq_num_entry_t *next;	// next entry in list
-} seq_num_entry_t;
-
 
 void OSPFInit();
 void OSPFProcessPacket(gpacket_t *in_pkt);
@@ -122,6 +112,7 @@ void OSPFSendLSA();
 void OSPFSendHelloThread();
 void OSPFNeighbourLivenessChecker();
 void craftCommonOSPFHeader(ospfhdr_t *ospfhdr, int ospf_pkt_size, int pkt_type);
+void parseLinks(ospf_ls_update_t *update, Node *node);
 
 /*Neighbours management*/
 void NeighboursTableInit();
@@ -134,6 +125,5 @@ int getEmptyIndex();
 void printNeighboursTable();
 int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag);
 int setStubToTrueFlag(uchar *nbour_ip_addr);
-void printSeqNumTable();
 
 #endif
