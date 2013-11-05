@@ -1,5 +1,144 @@
 #include "dijkstra.h"
 
+void printuchar(uchar ip[]){
+	printf("%d.%d.%d.%d", ip[3], ip[2], ip[1],ip[0]);
+}
+
+
+char* getucharstr(uchar ip[]){
+	char* str = (char*)malloc(sizeof(char)*16);
+	sprintf(str, "%d.%d.%d.%d", ip[3], ip[2], ip[1], ip[0]);
+
+	///printf("%s", str);
+
+	return str;	
+}
+
+//-------FUNCTIONS------------
+//Given the node's ip(ip) and sequence number(seq_numb), returns a freshly new created baby node 
+Node* createNode(char *ip, int seq_Numb){
+	Node *newNode = (Node *)malloc(sizeof(Node));
+	newNode->seq_Numb = seq_Numb;
+
+	Dot2IP(ip, newNode->ip);
+
+	return newNode;
+}
+
+//Given link ID (linkId), link data and link type, create freshly new created link and returns it
+//If link type != 2 || 3 --> return NULL
+Link* createLink(char *linkId, char *linkData, int linkType){
+	//If linkType != 2 || 3 ===> return NULL
+	if(!((linkType ==2) || (linkType ==3)))
+		return NULL;
+
+	Link *newLink = (Link *)malloc(sizeof(Link));
+
+	newLink->linkType = linkType;
+	Dot2IP(linkId, newLink->linkId);
+	Dot2IP(linkData, newLink->linkData);
+
+	return newLink;
+}
+
+//Returns the length of a graph given the head of the graph
+int graphLength(Node *root){
+	int length = 0;
+	Node *node = root;
+	while(node != NULL){
+		//printf("Element found: %s\n",list->router->ip);
+		node = node->next;
+		length++;
+	}
+	//printf("Length of list is of : %d\n\n", length);
+	return length;
+}
+
+//Returns the length of the neighbour list of a Node given a node
+int neighbourListLength(Node *node){
+	int length = 0;
+	Link *link = node->list;
+	while(link != NULL){
+		link = link->next;
+		length++;
+	}
+
+	return length;
+}
+
+//Add router node rToAdd to router addToThisR's list
+void addNextNode(Node **root, Node *node){
+	node->next = 	(*root);
+	*root = node;
+}
+
+//Add router rToAdd to router addToThisR's list
+void addNeighbour(Node *node, Link *link){
+	link->next = node->list;
+	node->list = link;
+}
+
+//Remove all neighbours from
+void removeAllNeighbours(Node *node){
+	node->list = NULL;
+}
+
+//Given the head of a graph, prints all elements contained in list
+void printGraph(Node *node){
+	int i = 0, j=0;
+	char *str;
+	Link *link;
+	printf("Number of nodes in Graph: %d\n", graphLength(node));
+	printf("------------------------------\n");
+
+	while(node != NULL){
+		printf("| %d |  ip: %s\tsequence #: %d\n", i, getucharstr(node->ip), node->seq_Numb);
+
+		link = node->list;
+		j=0;
+		printf("|\tNumber of neighbours of node %d: %d\n", i, neighbourListLength(node));
+		printf("|\t--------------------------------\n");
+		while(link!=NULL){
+			printf("|\t| %d :\tLink ID: %s\n", j, getucharstr(link->linkId));
+			printf("|\t|\tLink Data: %s\n", getucharstr(link->linkData));
+			printf("|\t|\tLink Type: %d\n", link->linkType);
+			link = link->next;
+			j++;
+		}
+		printf("|\n");
+		node = node->next;
+		i++; 	
+	}
+
+	printf("\n");
+}
+
+//Obtained the lowest distance in the distance array (for dijkstra algorithm)
+int getLowestDistance(int distance[], int observed[], int numbNodes){
+	int result = -1, smallestValue = INFINITY, i;
+
+	for(i=0;i<numbNodes;i++){
+		if(observed[i]==1)
+			continue;
+		if(distance[i] < smallestValue){
+			smallestValue=distance[i];
+			result = i;
+		}
+	}
+
+	return result;
+}
+
+//Recursive function that finds the next router in the router list --> returns router list ID
+int calcNextHop(int index, int distance[], int previousNode[]){
+	if(distance[previousNode[index]] == INFINITY) return -1;
+
+	if(distance[previousNode[index]] == 0) return index;
+
+	return calcNextHop(previousNode[index], distance, previousNode);
+}
+
+
 //Constant declaration
 /*#define INFINITY	99999
 
