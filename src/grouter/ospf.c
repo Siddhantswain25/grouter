@@ -165,7 +165,7 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 
 		// Broadcast the packet (starting at OSPF header)
 		printf("Broadcasting this packet\n");
-		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 1, OSPF_PROTOCOL);
+		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
 		//TODO parse links, update graph & run dijkstra & update forwarding table if necessary.
 
@@ -210,7 +210,11 @@ void OSPFSendLSA() {
 			+ OSPF_HEADER_SIZE);
 	lsa_hdr->age = 0;
 	lsa_hdr->type = 1;
-	//lsa_hdr->link_state_id and ads_router set when broadcasting
+	//lsa_hdr->link_state_id and ads_router set when broadcasting. For now all zeroes:
+	for (i = 0; i < 4; i++) {
+		lsa_hdr->link_state_id[i] = 0;
+		lsa_hdr->ads_router[i] = 0;
+	}
 	lsa_hdr->seq_num = mySeqNum;
 	mySeqNum++;
 	lsa_hdr->cksum = 0;
