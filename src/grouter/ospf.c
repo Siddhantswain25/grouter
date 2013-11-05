@@ -105,6 +105,7 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 
 //TODO merge linked list stuff with graph in dijkstra if there's time.
 void OSPFProcessLSA(gpacket_t *in_pkt) {
+	
 	verbose(2, "[OSPFProcessLSA]:: processing incoming LSA packet...");
 
 	char src_ip_buf[MAX_TMPBUF_LEN];
@@ -165,6 +166,7 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 
 		// Broadcast the packet (starting at OSPF header)
 		printf("Broadcasting this packet\n");
+
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
 		//TODO parse links, update graph & run dijkstra & update forwarding table if necessary.
@@ -536,10 +538,10 @@ int getEmptyIndex() {
 void printNeighboursTable() {
 	int i;
 	char tmpbuf[MAX_TMPBUF_LEN];
-	printf("---------------------------------------------------------\n");
+	printf("------------------------------------------------------------------\n");
 	printf(" O S P F :  N E I G H B O U R S  T A B L E  \n");
-	printf("---------------------------------------------------------\n");
-	printf("index\tInterface\tNeighbour\tisBidirectional \n");
+	printf("------------------------------------------------------------------\n");
+	printf("index\tInterface\tNeighbour\tisStub\tisBidirectional \n");
 	for (i = 0; i < MAX_INTERFACES; i++) {
 		if (nbours_tbl[i].is_empty == FALSE) {
 			printf("%d\t", i);
@@ -547,10 +549,12 @@ void printNeighboursTable() {
 			if (strlen(tmpbuf) <= 8)
 				printf("\t"); //just to pretty print
 			printf("%s\t", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
+			printf("%d\t", nbours_tbl[i].is_stub);
 			printf("%d\n", nbours_tbl[i].bidirectional);
+			
 		}
 	}
-	printf("---------------------------------------------------------\n");
+	printf("-----------------------------------------------------------------\n");
 	return;
 }
 

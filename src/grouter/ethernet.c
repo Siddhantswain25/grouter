@@ -104,6 +104,7 @@ void* fromEthernetDev(void *arg)
 
 
 		//FOR OSPF
+		char tmpbuf[MAX_TMPBUF_LEN];
 		uchar valMac1[6];
 		uchar valMac2[6];
 		uchar valMac3[6];
@@ -113,18 +114,27 @@ void* fromEthernetDev(void *arg)
 		Colon2MAC(test1, valMac1);
 		Colon2MAC(test2, valMac2);
 		Colon2MAC(test3, valMac3);
-		if(COMPARE_MAC(in_pkt->data.header.dst, valMac1) == 0 || COMPARE_MAC(in_pkt->data.header.dst, valMac2) == 0
-		 || COMPARE_MAC(in_pkt->data.header.dst, valMac3) == 0){
+		if(COMPARE_MAC(in_pkt->data.header.dst, valMac1) == 0 || 
+			COMPARE_MAC(in_pkt->data.header.dst, valMac2) == 0|| 
+			COMPARE_MAC(in_pkt->data.header.dst, valMac3) == 0){
+
+			uchar link_ip[4];
+			COPY_IP(link_ip,  iface->ip_addr);
+			link_ip[0] = IP_ZERO_PREFIX;
+			printf("Received IPV6 ICMP bcast from : %s \n", IP2Dot(tmpbuf, link_ip));
 			//Then we know that this packet comes from a stub network
 			//Set stub bit in neighbour table to true
-			int index = findNeighbourIndex(in_pkt->frame.src_ip_addr);
+			//printGPacket(in_pkt, 3, "IP_ROUTINE");
+			int index = findNeighbourIndex(link_ip);
 
 			if(index == -1)
 			{
-				addNeighbourEntry(in_pkt->frame.dst_interface, in_pkt->frame.src_ip_addr);
+				addNeighbourEntry(iface->ip_addr, link_ip);
 			}
 
-			setStubToTrueFlag(in_pkt->frame.src_ip_addr);
+			setStubToTrueFlag(link_ip);
+			
+			
 		}
 		
 		// check whether the incoming packet is a layer 2 broadcast or

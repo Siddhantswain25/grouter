@@ -394,6 +394,7 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 						COPY_IP(lsahdr->link_state_id, gHtonl(tmpbuf, iface_ip[i]));
 						COPY_IP(lsahdr->ads_router, gHtonl(tmpbuf, iface_ip[i]));
 					}
+					printGPacket(cp_pkt, 3, "IP_ROUTINE");
 				}
 				//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
 				
@@ -493,7 +494,7 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 	cksum = checksum((uchar *)ip_pkt, ip_pkt->ip_hdr_len*2);
 	ip_pkt->ip_cksum = htons(cksum);
 	pkt->data.header.prot = htons(IP_PROTOCOL);
-
+	
 	IPSend2Output(pkt);
 	verbose(2, "[IPOutgoingPacket]:: IP packet sent to output queue.. ");
 	return EXIT_SUCCESS;
