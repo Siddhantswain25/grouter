@@ -24,7 +24,7 @@ typedef struct _Router{
 	Node *list;
 }Router;*/
 
-
+/*
 void printuchar(uchar ip[]){
 	printf("%d.%d.%d.%d", ip[0], ip[1], ip[2],ip[3]);
 }
@@ -219,9 +219,9 @@ NextHop* calculateDijkstra(Router *root, Router *sourceRouter){
 		 getucharstr(sourceRouter->network), getucharstr(sourceRouter->submask), 
 		 getucharstr(router[i].network), getucharstr(router[i].submask), distance[i], 
 		 getucharstr(router[i].network), getucharstr(router[i].submask), 
-		 getucharstr(router[id].network), getucharstr(router[id].submask));*/
+		 getucharstr(router[id].network), getucharstr(router[id].submask));
 	}
-
+/*
 	printf("\n\n");
 	//printf("TODO: Update Forwarding Table");
 
@@ -351,7 +351,7 @@ int test(){
 
 	//Second Setup
 
-	Router *root = (Router *)malloc(sizeof(Router));
+	/*Router *root = (Router *)malloc(sizeof(Router));
 
 	//Populate Nodes for Dijkstra test
 	Router *a = (Router *)malloc(sizeof(Router));
@@ -431,4 +431,4 @@ int test(){
 	calculateDijkstra(root, a);
 
 	return 0;
-}
+}*/

@@ -11,21 +11,28 @@
 #define INFINITY	99999
 
 //Predeclared Structs
-typedef struct _Router Router;
 typedef struct _Node Node;
+typedef struct _Link Link;
 typedef struct _NextHop NextHop;
 
 //------STRUCTS--------
-typedef struct _Node{
-	Router *router;
-	Node *next;
-}Node;
+typedef struct _Link{
+	uchar linkId[4];		//-.-.-.0
+	uchar linkData[4];		//Netmask
+	int linkType;
 
-typedef struct _Router{
-	uchar submask[4];
-	uchar network[4];
-	Node *list;
-}Router;
+	Link *next;
+}Link;
+
+typedef struct _Node{
+	uchar ip[4];			//Equal to network IP
+
+	int seq_Numb;			//Sequence number
+
+	Node *next;				//Next node in graph
+
+	Link *list;				//List of neighbours
+}Node;
 
 typedef struct _NextHop{
 	uchar rsubmask[4];
@@ -38,7 +45,7 @@ typedef struct _NextHop{
 
 
 //Predeclared Functions
-void printList(Node *list);
+/*void printList(Node *list);
 void printuchar(uchar ip[]);
 char* getucharstr(uchar ip[]);
 int length(Node *givenList);
@@ -47,4 +54,4 @@ int getLowestDistance(int distance[], int observed[], int numbNodes);
 int getNodeId(Router *router, Router routers[], int numbNodes);
 int calcNextHop(int index, int distance[], int previousNode[]);
 NextHop* calculateDijkstra(Router *root, Router *sourceRouter);
-int test();
+int test();*/
