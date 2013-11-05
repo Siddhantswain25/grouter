@@ -591,6 +591,6 @@ int isInSameNetwork(uchar *ip_addr1, uchar *ip_addr2)
 }
 
 int getInterfaces(uchar buf[][4]) {
-	return findAllInterfaceIPs(MTU_tbl, uchar);
+	return findAllInterfaceIPs(MTU_tbl, buf);
 }
 
