@@ -7,7 +7,7 @@
 
 #define TYPE_ANY_TO_ANY		2
 #define TYPE_STUB			3
-#define INFINITY	99999
+#define INF					99999
 
 //Predeclared Structs
 typedef struct _Node Node;
@@ -70,6 +70,7 @@ NextHop* calculateDijkstra(Node *head, Node *sourceNode);
 void printNextHopList(NextHop *list);
 Node *getNodeByIP(Node *graph, uchar ip[]);
 void printGraph(Node *graph);
+void printNextHops(NextHop *head);
 Node *addNode(Node *graph, Node *newNode);
 Link *addLink(Link *list, Link *newLink);
 

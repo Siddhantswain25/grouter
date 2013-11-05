@@ -159,8 +159,11 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
-		// TODO run dijkstra & update forwarding table if necessary.
+		// Run Dijkstra's Algorithm on the new graph.
+		//NextHop *nh = calculateDijkstra(graph);
+		//printNextHops(nh);
 
+		// TODO update forwarding table if necessary.
 	}
 	else {
 		printf("Received duplicate packet, not broadcasting!\n");

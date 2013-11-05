@@ -590,3 +590,7 @@ int isInSameNetwork(uchar *ip_addr1, uchar *ip_addr2)
 	return EXIT_FAILURE;
 }
 
+int getInterfaces(uchar buf[][4]) {
+	return findAllInterfaceIPs(MTU_tbl, uchar);
+}
+

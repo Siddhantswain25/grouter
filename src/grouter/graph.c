@@ -118,7 +118,7 @@ void printGraphJeremie(Node *node){
 
 //Obtained the lowest distance in the distance array (for dijkstra algorithm)
 int getNodeWithLowestDistance(int distance[], int observed[], int numbNodes){
-	int result = -1, smallestValue = INFINITY, i;
+	int result = -1, smallestValue = INF, i;
 
 	for(i=0;i<numbNodes;i++){
 		if(observed[i]==1)
@@ -149,7 +149,7 @@ int getNodeId(Link *neighbour, Node nodes[], int numbNodes){
 
 //Recursive function that finds the next router in the router list --> returns router list ID
 int calcNextHop(int index, int distance[], int previousNode[]){
-	if(distance[previousNode[index]] == INFINITY) return -1;
+	if(distance[previousNode[index]] == INF) return -1;
 
 	if(distance[previousNode[index]] == 0) return index;
 
@@ -173,7 +173,7 @@ NextHop* calculateDijkstra(Node *head, Node *sourceNode){
 	//Set all variables inside all arrays
 	for(i=0;i<numbNodes;i++){
 		node[i] = *nodes;
-		distance[i] = INFINITY;
+		distance[i] = INF;
 		//if(strcmp(nodes->router->ip, sourceRouter->ip) == 0)
 		if((COMPARE_IP(nodes->ip, sourceNode->ip) == 0))
 		{
@@ -260,7 +260,7 @@ NextHop* calculateDijkstra(Node *head, Node *sourceNode){
 			continue;
 
 		//If we have infinity still left in a node, then this node is unreachable
-		if(distance[i] == INFINITY)
+		if(distance[i] == INF)
 			printf("\t|Distance of node %s is INFINITY. This node is unreachable from source.", getucharstr(node[i].ip));
 
 
@@ -360,6 +360,22 @@ void printGraph(Node *graph) {
 			curLink = curLink->next;
 		}
 		curNode = curNode->next;
+	}
+}
+
+void printNextHops(NextHop *head) {
+	printf("------------------------------------------------------------------\n");
+	printf(" O S P F :  N E X T   H O P S  \n");
+	printf("------------------------------------------------------------------\n");
+	printf("Network Address\tSubnet Mask\tNext Hop\n");
+
+	uchar tmpbuf[MAX_TMPBUF_LEN];
+	NextHop *cur = head;
+	while (cur != NULL) {
+		printf("%s\t", IP2Dot(tmpbuf, cur->rnetwork));
+		printf("%s\t", IP2Dot(tmpbuf, cur->rsubmask));
+		printf("%s\t\n", IP2Dot(tmpbuf, cur->nh_ip));
+		cur = cur->next;
 	}
 }
 
