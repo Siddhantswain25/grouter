@@ -129,7 +129,7 @@ void* fromEthernetDev(void *arg)
 
 			if(index == -1)
 			{
-				addNeighbourEntry(iface->ip_addr, link_ip);
+				addNeighbourEntry(iface->ip_addr, link_ip, iface->interface_id);
 			}
 
 			setStubToTrueFlag(link_ip);

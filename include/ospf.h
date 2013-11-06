@@ -99,6 +99,7 @@ typedef struct _nbour_entry_t
 	bool is_stub;						// if ip address represents a stub network: 0 = no, i = yes
 	uchar nbour_ip_addr[4];				// neighbour ip address
 	uchar iface_ip_addr[4];				// interface ip address
+	int interface_id;
 	struct timeval tv;					//time value of last hello message received
 } nbour_entry_t;
 
@@ -113,10 +114,12 @@ void OSPFSendHelloThread();
 void OSPFNeighbourLivenessChecker();
 void craftCommonOSPFHeader(ospfhdr_t *ospfhdr, int ospf_pkt_size, int pkt_type);
 void parseLinks(ospf_ls_update_t *update, Node *node);
+void updateRoutingTable();
+void OSPFprintTopology();
 
 /*Neighbours management*/
 void NeighboursTableInit();
-int addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr);
+int addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr, int interface_id);
 void deleteNeighbourEntry(uchar *nbour_ip_addr);
 int findNeighbourIndex(uchar *nbour_ip_addr);
 int findAllNeighboursIPs(uchar buf[][4]);
@@ -125,5 +128,6 @@ int getEmptyIndex();
 void printNeighboursTable();
 int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag);
 int setStubToTrueFlag(uchar *nbour_ip_addr);
+int isInterfaceDead(uchar *iface_ip_addr);
 
 #endif

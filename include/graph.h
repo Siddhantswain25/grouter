@@ -37,11 +37,11 @@ typedef struct _Node{
 }Node;
 
 typedef struct _NextHop{
-	uchar rsubmask[4];
-	uchar rnetwork[4];
-	uchar nh_ip[4];
+	uchar rsubmask[4];  //destination subnet
+	uchar rnetwork[4]; 	// always 255.255.255.0
+	uchar nh_ip[4];		//nexthop (neighbour) ip
 
-	uchar interfaceIp[4];
+	uchar interfaceIp[4];	//interface ip
 
 	int distance;
 

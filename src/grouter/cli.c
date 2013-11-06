@@ -880,6 +880,10 @@ void ospfCmd()
 		OSPFSendLSA();
 	} else if (!strcmp(next_tok, "-printneighbours") || !strcmp(next_tok, "-n")) {
 		printNeighboursTable();
+	} else if (!strcmp(next_tok, "-printgraph") || !strcmp(next_tok, "-g")) {
+		OSPFprintTopology();
+	} else if (!strcmp(next_tok, "-updateroutes") || !strcmp(next_tok, "-r")) {
+		updateRoutingTable();
 	}
 
 
