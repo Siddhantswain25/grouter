@@ -157,8 +157,22 @@ int calcNextHop(int index, int distance[], int previousNode[]){
 }
 
 
+//Function that checks if the IP of the node corresponds to one IP of an interface
+//Returns 1 if true (if IP address corresponds to one of the interface of the router), 0 if false
+int isNodeAnInterfaceOfRouter(char *ip, uchar interfaces[][4], int numbInterface){
+	int i = 0;
+
+	for(i=0;i<numbInterface;i++){
+		if(COMPARE_IP(ip,interfaces[i]) == 0)
+			return 1;	
+	}
+
+	return 0;
+}
+
+
 //Well, given a list of nodes and a source node, calculates the dijkstra algorithm
-NextHop* calculateDijkstra(Node *head, Node *sourceNode){
+NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface){
 	//First set all necessary variables for this dijkstra calculation
 	Node *nodes = head;
 	int numbNodes = graphLength(nodes), i, currentNodeId = 0, id;
@@ -175,11 +189,11 @@ NextHop* calculateDijkstra(Node *head, Node *sourceNode){
 		node[i] = *nodes;
 		distance[i] = INF;
 		//if(strcmp(nodes->router->ip, sourceRouter->ip) == 0)
-		if((COMPARE_IP(nodes->ip, sourceNode->ip) == 0))
+		if((isNodeAnInterfaceOfRouter(nodes->ip, interfaces, numbInterface) == 1))
 		{
 			printf("Set Distance of node %d: %s to 0.\n", i, getucharstr(nodes->ip));
 			distance[i] = 0;
-			currentNodeId = i;
+			//currentNodeId = i;
 		}
 
 		seen[i] = 0;
@@ -252,7 +266,7 @@ NextHop* calculateDijkstra(Node *head, Node *sourceNode){
 	//Dijkstra stopped running
 	printf("\n\nAlgorithm has stopped running. Calculating paths for each nodes.\n\n");
 
-	printf("Source Node: %s\n", getucharstr(sourceNode->ip));
+	//printf("Source Node: %s\n", getucharstr(sourceNode->ip));
 
 	for(i=0;i<numbNodes;i++){
 		//We don't calculate nextHop for our router
@@ -266,8 +280,8 @@ NextHop* calculateDijkstra(Node *head, Node *sourceNode){
 
 		id = calcNextHop(i, distance, previousNode);
 
-		printf("\t|%s to %s takes %d hops. \n\t|\tNext hop to reach %s is: %s\n",
-		 getucharstr(sourceNode->ip), getucharstr(node[i].ip), distance[i], getucharstr(node[i].ip),getucharstr(node[id].ip));
+		printf("\t|To get to%s it takes %d hops. \n\t|\tNext hop to reach %s is: %s\n",
+			getucharstr(node[i].ip), distance[i], getucharstr(node[i].ip),getucharstr(node[id].ip));
 
 
 
