@@ -587,6 +587,7 @@ void printNeighboursTable() {
 	return;
 }
 
-void staticPrintGraph() {
+void OSPFprintTopology() {
 	printGraph(graph);
 }
+

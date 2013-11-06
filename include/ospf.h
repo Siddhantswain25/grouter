@@ -114,7 +114,7 @@ void OSPFNeighbourLivenessChecker();
 void craftCommonOSPFHeader(ospfhdr_t *ospfhdr, int ospf_pkt_size, int pkt_type);
 void parseLinks(ospf_ls_update_t *update, Node *node);
 void updateRoutingTable();
-void staticPrintGraph();
+void OSPFprintTopology();
 
 /*Neighbours management*/
 void NeighboursTableInit();
