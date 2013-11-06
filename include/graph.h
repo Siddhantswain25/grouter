@@ -43,6 +43,8 @@ typedef struct _NextHop{
 
 	uchar interfaceIp[4];
 
+	int distance;
+
 	NextHop *next;
 }NextHop;
 
@@ -70,6 +72,8 @@ int getNodeWithLowestDistance(int distance[], int observed[], int numbNodes);
 int getNodeId(Link *neighbour, Node nodes[], int numbNodes);
 int calcNextHop(int index, int distance[], int previousNode[]);
 int isNodeAnInterfaceOfRouter(char *ip, uchar interfaces[][4], int numbInterface);
+int nextHopListLength(NextHop *list);
+NextHop* removeRedundancy(NextHop *list);
 NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface);
 void printNextHopList(NextHop *list);
 Node *getNodeByIP(Node *graph, uchar ip[]);

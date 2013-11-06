@@ -159,6 +159,19 @@ int calcNextHop(int index, int distance[], int previousNode[]){
 
 //Function that checks if the IP of the node corresponds to one IP of an interface
 //Returns 1 if true (if IP address corresponds to one of the interface of the router), 0 if false
+int findCorrectInterface(uchar *ip, uchar interfaces[][4], int numbInterface){
+	int i = 0;
+
+	for(i=0;i<numbInterface;i++){
+		if((ip[1]==interfaces[i][1])&&(ip[2]==interfaces[i][2])&&(ip[3]==interfaces[i][3]))
+			return i;	
+	}
+
+	return -1;
+}
+
+//Function that checks if the IP of the node corresponds to one IP of an interface
+//Returns 1 if true (if IP address corresponds to one of the interface of the router), 0 if false
 int isNodeAnInterfaceOfRouter(char *ip, uchar interfaces[][4], int numbInterface){
 	int i = 0;
 
@@ -170,12 +183,91 @@ int isNodeAnInterfaceOfRouter(char *ip, uchar interfaces[][4], int numbInterface
 	return 0;
 }
 
+int nextHopListLength(NextHop *list){
+	int i = 0;
+
+	while(list!=NULL){
+		list = list->next;
+		i++;
+	}
+
+	return i;
+}
+
+//Take a list of nexthop and remove redundancy by keeping best solutions
+NextHop* removeRedundancy(NextHop *list){
+	int listLength = nextHopListLength(list), i, j;
+
+	if(listLength == 0){
+		printf("Returning a null List.\n");
+		return NULL;
+	}else if(listLength == 1){
+		printf("Returning original list.\n");
+		return list;
+	}
+
+	NextHop nextHops[listLength];
+	int include[listLength];
+
+	NextHop *tempList = list;
+
+	for(i = 0; i < listLength ; i++){
+		nextHops[i] = *tempList;
+		include[i] = 1;
+		tempList = tempList->next;
+	}
+
+	for(i = 0; i < listLength ; i++){
+		//printf("Now checking for node: %s/(%s)\n", );
+		if(i!=(listLength-1))
+		{
+			for(j = i+1; j<listLength; j++){
+				if(include[j] == 0){
+					printf("Skip this one as found a better one.");
+					continue;
+				}
+				if(COMPARE_IP(nextHops[i].rnetwork, nextHops[j].rnetwork) == 0 && COMPARE_IP(nextHops[i].rsubmask, nextHops[j].rsubmask)==0){
+					printf("We have a fucking match now remove on for fucks sake.\n");
+					printf("Comparing %s/(%s): %d,  with %s/(%s): %d.\n", getucharstr(nextHops[i].rnetwork), getucharstr(nextHops[i].rsubmask),
+						nextHops[i].distance, getucharstr(nextHops[j].rnetwork), getucharstr(nextHops[j].rsubmask), nextHops[j].distance);
+					if(nextHops[i].distance >= nextHops[j].distance){
+						printf("Removing one node: %s/(%s)\n", getucharstr(nextHops[i].rnetwork), getucharstr(nextHops[i].rsubmask));
+						include[i] = 0;
+						break;
+					}else{
+						printf("Removing one node: %s/(%s)\n", getucharstr(nextHops[j].rnetwork), getucharstr(nextHops[j].rsubmask));
+						include[j]=0;
+					}
+				}
+			}
+		}
+	}
+
+	NextHop *newList = NULL;
+
+	for(i=0;i<listLength;i++){
+		if(include[i] == 1){
+			NextHop *newNode = (NextHop *)malloc(sizeof(NextHop));
+			COPY_IP(newNode->rnetwork, nextHops[i].rnetwork);
+			COPY_IP(newNode->rsubmask, nextHops[i].rsubmask);
+			COPY_IP(newNode->nh_ip, nextHops[i].nh_ip);
+			COPY_IP(newNode->interfaceIp, nextHops[i].interfaceIp);
+			newNode->distance = nextHops[i].distance;
+
+			newNode->next = newList;
+			newList = newNode;
+		}
+	}
+
+	return newList;
+}
+
 
 //Well, given a list of nodes and a source node, calculates the dijkstra algorithm
 NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface){
 	//First set all necessary variables for this dijkstra calculation
 	Node *nodes = head;
-	int numbNodes = graphLength(nodes), i, currentNodeId = 0, id;
+	int numbNodes = graphLength(nodes), i, j, currentNodeId = 0, id;
 	Node node[numbNodes];
 	int distance[numbNodes], seen[numbNodes], numbSeen = 0;
 	int previousNode[numbNodes];
@@ -183,6 +275,8 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 	//Create NextHopList to add stub network when finding them while computing dijkstra algorithm
 	NextHop *nextHopList = NULL;
 	StubHop *stubHops = NULL;
+
+	printGraphJeremie(head);
 
 	//Set all variables inside all arrays
 	for(i=0;i<numbNodes;i++){
@@ -209,8 +303,9 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 
 		//This implies that there was no path found to get to the destination node
 		if(currentNodeId == -1) {
-			printf("ERROR: Impossible to get to node %s, ending algorithm.", getucharstr(node[currentNodeId].ip));
-			return NULL;
+			printf("There are no more possible connections between routers. Ending algorithm\n");
+			numbSeen = numbNodes;
+			continue;
 		}
 
 		printf("Smallest node is now %d with # hops distance == %d from source.\n",currentNodeId, distance[currentNodeId]);
@@ -238,12 +333,26 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 			}else{//Has type 2
 
 				id = getNodeId(neighbour, node, numbNodes);
-				printf("Id of node %s is : %d\n", getucharstr(neighbour->linkData), id);
-				printf("Distance of node %d is: %d, whereas distance of node %d +1 is: %d\n", id, distance[id], currentNodeId, distance[currentNodeId]+1);
-				if(distance[id] > (distance[currentNodeId] + 1)){//If we find a shorter path to this node
-					distance[id] = distance[currentNodeId] + 1;
-					previousNode[id] = currentNodeId;
-					printf("Changing distance of node %s\n", getucharstr(neighbour->linkData));
+				if(id == -1){
+					printf("There is no recorded router for neighbour %s. Path ends here.", getucharstr(neighbour->linkData));
+
+					StubHop *hop = (StubHop *)malloc(sizeof(StubHop));
+				
+					COPY_IP(hop->rnetwork, neighbour->linkData);
+					Dot2IP("255.255.255.0", hop->rsubmask);
+					hop->assNode = currentNodeId;//reference node that will have the same nextHop
+
+					hop->next = stubHops;
+					stubHops = hop;
+				}else{
+
+					printf("Id of node %s is : %d\n", getucharstr(neighbour->linkData), id);
+					printf("Distance of node %d is: %d, whereas distance of node %d +1 is: %d\n", id, distance[id], currentNodeId, distance[currentNodeId]+1);
+					if(distance[id] > (distance[currentNodeId] + 1)){//If we find a shorter path to this node
+						distance[id] = distance[currentNodeId] + 1;
+						previousNode[id] = currentNodeId;
+						printf("Changing distance of node %s\n", getucharstr(neighbour->linkData));
+					}
 				}
 			}
 
@@ -260,10 +369,11 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 		//We don't calculate nextHop for our router
 		if(distance[i] == 0)
 			continue;
-
 		//If we have infinity still left in a node, then this node is unreachable
-		if(distance[i] == INF)
+		if(distance[i] == INF){
 			printf("\t|Distance of node %s is INFINITY. This node is unreachable from source.", getucharstr(node[i].ip));
+			continue;
+		}
 
 
 		id = calcNextHop(i, distance, previousNode);
@@ -282,9 +392,28 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 
 		Dot2IP("255.255.255.0", next->rsubmask);
 
-		COPY_IP(next->nh_ip, node[id].ip);
+		if(distance[i] == 1){
+			//We are right next to the network
+			Dot2IP("0.0.0.0", next->nh_ip);
+		}else{
+			COPY_IP(next->nh_ip, node[id].ip);
+			/*j = findCorrectInterface(node[id].ip, interfaces, numbInterface);
+			if(j == -1){
+				printf("ERROR: INTERFACE # == -1 skipping this element");
+				continue;
+			}
+			COPY_IP(next->interfaceIp, interfaces[j]);*/
+		}
 
-		COPY_IP(next->interfaceIp, node[previousNode[id]].ip);
+		j = findCorrectInterface(node[id].ip, interfaces, numbInterface);
+		if(j == -1){
+			printf("ERROR: INTERFACE # == -1 skipping this element");
+			continue;
+		}
+		COPY_IP(next->interfaceIp, interfaces[j]);
+
+
+		next->distance = distance[i];
 
 		next->next = nextHopList;
 		nextHopList = next;
@@ -298,6 +427,32 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 
 		if(previousNode[stubHops->assNode] == -1)
 		{
+			NextHop *next = (NextHop *)malloc(sizeof(NextHop));
+
+			next->rnetwork[0] = 0;
+			next->rnetwork[1] = stubHops->rnetwork[1];
+			next->rnetwork[2] = stubHops->rnetwork[2];
+			next->rnetwork[3] = stubHops->rnetwork[3];
+
+			COPY_IP(next->rsubmask, stubHops->rsubmask);
+			
+			Dot2IP("0.0.0.0", next->nh_ip);
+			//COPY_IP(next->nh_ip, stubHops->rnetwork);
+
+			j = findCorrectInterface(stubHops->rnetwork, interfaces, numbInterface);
+			if(j == -1){
+				printf("ERROR: INTERFACE # == -1 skipping this element");
+				continue;
+			}
+			COPY_IP(next->interfaceIp, interfaces[j]);
+
+			//COPY_IP(next->interfaceIp, node[stubHops->assNode].ip);
+
+			next->next = nextHopList;
+			nextHopList = next;
+
+			next->distance = distance[stubHops->assNode] + 1;
+
 			stubHops = stubHops->next;
 			continue;
 		}
@@ -311,23 +466,20 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 		next->rnetwork[3] = stubHops->rnetwork[3];
 
 		COPY_IP(next->rsubmask, stubHops->rsubmask);
-		/*next->rsubmask[0] = stubHops->rsubmask[0];
-		next->rsubmask[1] = stubHops->rsubmask[1];
-		next->rsubmask[2] = stubHops->rsubmask[2];
-		next->rsubmask[3] = stubHops->rsubmask[3];*/
-
-		//printf("Id stored inside stubHops: %d\n", stubHops->assNode);
-
 
 		id = calcNextHop(stubHops->assNode, distance, previousNode);
 
 		COPY_IP(next->nh_ip, node[id].ip);
-		/*next->nh_ip[0] = node[id].ip[0];
-		next->nh_ip[1] = node[id].ip[1];
-		next->nh_ip[2] = node[id].ip[2];
-		next->nh_ip[3] = node[id].ip[3];*/
 
-		COPY_IP(next->interfaceIp, node[previousNode[id]].ip);
+		j = findCorrectInterface(node[id].ip, interfaces, numbInterface);
+		if(j == -1){
+			printf("ERROR: INTERFACE # == -1 skipping this element");
+			continue;
+		}
+		COPY_IP(next->interfaceIp, interfaces[j]);
+		//COPY_IP(next->interfaceIp, node[previousNode[id]].ip);
+
+		next->distance = distance[stubHops->assNode] + 1;
 
 		stubHops = stubHops->next;
 
@@ -337,12 +489,24 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 
 	printf("\n\n");
 
+	printf("We have a total of %d nexthops.\n",nextHopListLength(nextHopList));
+
+	//TODO: Check for redundancy:
+	nextHopList = removeRedundancy(nextHopList);
+
+	printf("After algorithm, we have a total of %d nexthops.\n",nextHopListLength(nextHopList));
+	//
+	//
+
+	//printNextHopList(nextHopList);
+
 	return nextHopList;
 }
 
 void printNextHopList(NextHop *list){
 	while(list!=NULL){
-		printf("Network %s with submask %s has next hop going to %s\n", getucharstr(list->rnetwork), getucharstr(list->rsubmask), getucharstr(list->nh_ip));
+		printf("Network %s with submask %s has next hop going to %s with distance of %d\n", 
+			getucharstr(list->rnetwork), getucharstr(list->rsubmask), getucharstr(list->nh_ip), list->distance);
 		printf("\t| Interface ip to send through: %s\n\n", getucharstr(list->interfaceIp));
 		list = list->next;
 	}
