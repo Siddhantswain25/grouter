@@ -155,7 +155,8 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 			if(result == 1) {
 				printf("[OSPFProcessHelloMessage]:: New bidirectional connection\n");
 				//bcast this change
-				//OSPFSendLSA();
+				OSPFSendLSA();
+				//TODO: change this!
 				//we don't run dijkstra and update routing tables here
 				//bc is done when receiving our on LSA bcast
 			}
