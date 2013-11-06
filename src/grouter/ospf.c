@@ -187,7 +187,7 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
 		//run dijkstra and update fwd tables
-		//updateRoutingTable();
+		updateRoutingTable();
 	}
 	else {
 		printf("Received duplicate packet, not broadcasting!\n");
