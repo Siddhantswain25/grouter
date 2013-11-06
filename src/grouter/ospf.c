@@ -41,6 +41,9 @@ void OSPFInit() {
 }
 
 void updateRoutingTable() {
+
+
+
 	// Run Dijkstra's Algorithm on the new graph.
 		uchar interfaces[MAX_INTERFACES][4];
 		int numInterfaces = getInterfaces(interfaces);
@@ -106,7 +109,7 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 			if(result == 1) {
 				printf("[OSPFProcessHelloMessage]:: New bidirectional connection\n");
 				//bcast this change
-				OSPFSendLSA();
+				//OSPFSendLSA();
 				//we don't run dijkstra and update routing tables here
 				//bc is done when receiving our on LSA bcast
 			}
