@@ -364,43 +364,49 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 	{
 		for (i = 0; i < count; i++)
 		{
-			verbose(2, "[IPOutgoingBcastAllInterPkt]:: preparing bcast for interface IP : %s ", IP2Dot(tmpbuf, iface_ip[i]));
-			//clone pkt
-			cp_pkt = duplicatePacket(pkt);
-			COPY_IP(dst_ip,iface_ip[i]);
-			//set 255 on last byte of destination IP address.
-			//Please noticed that this will only work for /24 networks.
-			dst_ip[0] = IP_BCAST_PREFIX; 
-			verbose(2, "[IPOutgoingBcastAllInterPkt]:: preparing bcast to  : %s ", IP2Dot(tmpbuf, dst_ip));
+			//check if neighbour still alive on our neighbours table.
+			//if we try to send to a dead neighbour it will crash bc of the broken sockets
+			verbose(2, "[IPOutgoingBcastAllInterPkt]:: looking for interface IP : %s \n", IP2Dot(tmpbuf, iface_ip[i]));
+			int result = isInterfaceDead(iface_ip[i]); 
+			if(result == 0) {
+				verbose(2, "[IPOutgoingBcastAllInterPkt]:: preparing bcast for interface IP : %s \n", IP2Dot(tmpbuf, iface_ip[i]));
+				//clone pkt
+				cp_pkt = duplicatePacket(pkt);
+				COPY_IP(dst_ip,iface_ip[i]);
+				//set 255 on last byte of destination IP address.
+				//Please noticed that this will only work for /24 networks.
+				dst_ip[0] = IP_BCAST_PREFIX; 
+				verbose(2, "[IPOutgoingBcastAllInterPkt]:: preparing bcast to  : %s \n", IP2Dot(tmpbuf, dst_ip));
 
-			//modify if necessary
-			ip_packet_t *ip_pkt = (ip_packet_t *)cp_pkt->data.data;
-			
-			if(src_prot == OSPF_PROTOCOL) //specific modifications for OSPF_PROTOCOL
-			{
-				ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
-				//set source IP on OSPF header
-				if (ospfhdr->type == OSPF_HELLO_MESSAGE) {
-					COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip[i]));
-				}
-				if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE) {
-					ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *)((uchar *)ospfhdr + OSPF_HEADER_SIZE);
-
-
-					if (newflag == 1) {
-						// This is a packet originated by me
-						//set OSPF header source & link state ID & advertising router on LSA header
-						COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip[i]));
-						COPY_IP(lsahdr->link_state_id, gHtonl(tmpbuf, iface_ip[i]));
-						COPY_IP(lsahdr->ads_router, gHtonl(tmpbuf, iface_ip[i]));
-					}
-				}
-				//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
+				//modify if necessary
+				ip_packet_t *ip_pkt = (ip_packet_t *)cp_pkt->data.data;
 				
-			}
-			//send to outgoing with each dst_ip different
+				if(src_prot == OSPF_PROTOCOL) //specific modifications for OSPF_PROTOCOL
+				{
+					ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
+					//set source IP on OSPF header
+					if (ospfhdr->type == OSPF_HELLO_MESSAGE) {
+						COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip[i]));
+					}
+					if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE) {
+						ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *)((uchar *)ospfhdr + OSPF_HEADER_SIZE);
 
-			IPOutgoingPacket(cp_pkt, dst_ip, size, 1, OSPF_PROTOCOL);
+
+						if (newflag == 1) {
+							// This is a packet originated by me
+							//set OSPF header source & link state ID & advertising router on LSA header
+							COPY_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip[i]));
+							COPY_IP(lsahdr->link_state_id, gHtonl(tmpbuf, iface_ip[i]));
+							COPY_IP(lsahdr->ads_router, gHtonl(tmpbuf, iface_ip[i]));
+						}
+					}
+					//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
+					
+				}
+				//send to outgoing with each dst_ip different
+
+				IPOutgoingPacket(cp_pkt, dst_ip, size, 1, OSPF_PROTOCOL);
+			}
 		}
 		return TRUE;
 	} 

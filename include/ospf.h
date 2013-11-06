@@ -127,5 +127,6 @@ int getEmptyIndex();
 void printNeighboursTable();
 int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag);
 int setStubToTrueFlag(uchar *nbour_ip_addr);
+int isInterfaceDead(uchar *iface_ip_addr);
 
 #endif

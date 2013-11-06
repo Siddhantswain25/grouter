@@ -509,6 +509,22 @@ int findNeighbourIndex(uchar *nbour_ip_addr) {
 	return -1;
 }
 
+int isInterfaceDead(uchar *iface_ip_addr) {
+	char tmpbuf[MAX_TMPBUF_LEN];
+	verbose(3, "inside findNeighbourByInterface \n");
+	int i;
+	for (i = 0; i < MAX_INTERFACES; i++) {
+		if (nbours_tbl[i].is_empty == TRUE
+			&& COMPARE_IP(nbours_tbl[i].iface_ip_addr, iface_ip_addr)
+						== 0) {
+			verbose(3, "[%d] found dead neighour, Interface %s is Dead \n", i, IP2Dot(tmpbuf, nbours_tbl[i].iface_ip_addr));
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 int findAllNeighboursIPs(uchar buf[][4]) {
 	int i, count = 0;
 	char tmpbuf[MAX_TMPBUF_LEN];
