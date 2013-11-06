@@ -162,8 +162,8 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 		// Run Dijkstra's Algorithm on the new graph.
 		uchar interfaces[MAX_INTERFACES][4];
 		int numInterfaces = getInterfaces(interfaces);
-		NextHop *nh = calculateDijkstra(graph, interfaces, numInterfaces);
-		printNextHops(nh);
+		//NextHop *nh = calculateDijkstra(graph, interfaces, numInterfaces);
+		//printNextHops(nh);
 
 		// TODO update forwarding table if necessary.
 	}
@@ -579,4 +579,8 @@ void printNeighboursTable() {
 	}
 	printf("-----------------------------------------------------------------\n");
 	return;
+}
+
+void OSPFprintTopology() {
+	printGraph(graph);
 }
