@@ -7,6 +7,7 @@
 #include "ospf.h"
 #include "ip.h"
 #include "graph.h"
+# include "routetable.h"
 #include <slack/err.h>
 #include <netinet/in.h>
 #include <sys/time.h>
@@ -17,6 +18,8 @@
 nbour_entry_t nbours_tbl[MAX_INTERFACES];
 Node *graph;
 uint32_t mySeqNum = 0;
+
+extern route_entry_t route_tbl[MAX_ROUTES];
 
 void OSPFInit() {
 	//RouteTableInit(route_tbl);
@@ -40,22 +43,50 @@ void OSPFInit() {
 	}
 }
 
-void runDijkstra(NextHop *nh) {
+void updateRoutingTable() {
 
-	// Run Dijkstra's Algorithm on the new graph.
+	char tmpbuf[MAX_TMPBUF_LEN];
+	NextHop *nh; //nh = head
 	uchar interfaces[MAX_INTERFACES][4];
 	int numInterfaces = getInterfaces(interfaces);
 	nh = calculateDijkstra(graph, interfaces, numInterfaces);
 	printNextHops(nh);
 	printNextHopList(nh);
-}
 
-void updateRoutingTable() {
-
-	
-	NextHop *nh;
-	runDijkstra(nh);
-
+	NextHop *cur = nh;
+	uchar zero_ip[] = OSPF_ZERO_ADDR;
+	while (cur != NULL) {
+		printf("Adding Route for: \n");
+		printf("Network Address\tSubnet Mask\tNext Hop\n");
+		printf("%s\t", IP2Dot(tmpbuf, cur->rnetwork));
+		printf("%s\t", IP2Dot(tmpbuf, cur->rsubmask));
+		printf("%s\t\n", IP2Dot(tmpbuf, cur->nh_ip));
+		//check if next hop is diff than 0.0.0.0
+		if ((COMPARE_IP(cur->nh_ip, zero_ip)) != 0) 
+		{
+			printf("IP is NOT 0.0.0.0\n");
+			//find neighbour using next_hop ip
+			int index = findNeighbourIndex(cur->nh_ip);
+			if (index >= 0) {
+				printf("found Neighbour at [%d]\n", index );
+				//get interface Id
+				int iface_id = nbours_tbl[index].interface_id;
+				
+				if(iface_id > 0) {
+					printf("found Interface : %d\n", iface_id);
+					//add route to fwd table
+					addRouteEntry(route_tbl, cur->rnetwork, cur->rsubmask, cur->nh_ip, iface_id);
+				} else {
+					printf("Couldn't found a valid Interface. Are you sure this neighbour is valid and alive?\n", iface_id);
+				}
+				
+			} else {
+				printf("Couldn't find this next hop neighour\n");
+			}
+		}
+		//TODO: if next hop 0.0.0.0 do we need to update the route table?
+		cur = cur->next;
+	}
 	//How do we get the interface id?
 
 	// TODO update forwarding table if necessary.

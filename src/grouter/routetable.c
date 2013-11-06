@@ -92,8 +92,8 @@ void addRouteEntry(route_entry_t route_tbl[], uchar* nwork, uchar* nmask, uchar*
 				// match
 				COPY_IP(route_tbl[i].nexthop, nhop);
 				route_tbl[i].interface = interface;
-
-				verbose(2, "[addRouteEntry]:: updated route table entry #%d", i);
+				printf("[addRouteEntry]:: updated route table entry #%d \n", i);
+				verbose(2, "[addRouteEntry]:: updated route table entry #%d \n", i);
 				return;
 			}
 		}
@@ -111,7 +111,8 @@ void addRouteEntry(route_entry_t route_tbl[], uchar* nwork, uchar* nmask, uchar*
 	route_tbl[ifree].interface = interface;
 	route_tbl[ifree].is_empty = FALSE;
 
-	verbose(2, "[addRouteEntry]:: overwrote route entry #%d", rtbl_replace_indx);
+	printf("[addRouteEntry]:: overwrote route entry #%d \n", rtbl_replace_indx);
+	verbose(2, "[addRouteEntry]:: overwrote route entry #%d \n", rtbl_replace_indx);
 	return;
 }
 
