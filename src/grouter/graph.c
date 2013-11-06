@@ -228,21 +228,9 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 			if(neighbour->linkType == 3){
 				//Add network stub to NextHop list
 				StubHop *hop = (StubHop *)malloc(sizeof(StubHop));
-				//hop->rnetwork = *(neighbour->linkId);
-				//char *tmp;
-				//Dot2IP(IP2Dot(tmp, neighbour->linkId), hop->rnetwork);
-				hop->rnetwork[0] = neighbour->linkId[0]; 
-				hop->rnetwork[1] = neighbour->linkId[1]; 
-				hop->rnetwork[2] = neighbour->linkId[2]; 
-				hop->rnetwork[3] = neighbour->linkId[3]; 
-
-				//hop->rsubmask = neighbour->linkData;
-				//Dot2IP(IP2Dot(tmp, neighbour->linkData), hop->rsubmask);
-				hop->rsubmask[0] = neighbour->linkData[0]; 
-				hop->rsubmask[1] = neighbour->linkData[1]; 
-				hop->rsubmask[2] = neighbour->linkData[2]; 
-				hop->rsubmask[3] = neighbour->linkData[3];
-
+				
+				COPY_IP(hop->rnetwork, neighbour->linkId);
+				COPY_IP(hop->rsubmask, neighbour->linkData);
 				hop->assNode = currentNodeId;//reference node that will have the same nextHop
 
 				hop->next = stubHops;
@@ -287,7 +275,6 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 
 		NextHop *next = (NextHop *)malloc(sizeof(NextHop));
 
-		//Dot2IP(tmp, next->rnetwork);
 		next->rnetwork[0] = 0;
 		next->rnetwork[1] = node[i].ip[1];
 		next->rnetwork[2] = node[i].ip[2];
@@ -295,11 +282,9 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 
 		Dot2IP("255.255.255.0", next->rsubmask);
 
-		//Dot2IP(IP2Dot(tmp, node[id].ip), next->nh_ip);
-		next->nh_ip[0] = node[id].ip[0];
-		next->nh_ip[1] = node[id].ip[1];
-		next->nh_ip[2] = node[id].ip[2];
-		next->nh_ip[3] = node[id].ip[3];
+		COPY_IP(next->nh_ip, node[id].ip);
+
+		COPY_IP(next->interfaceIp, node[previousNode[id]].ip);
 
 		next->next = nextHopList;
 		nextHopList = next;
@@ -317,26 +302,32 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 			continue;
 		}
 
+		//Create new NextHop
 		NextHop *next = (NextHop *)malloc(sizeof(NextHop));
+
 		next->rnetwork[0] = 0;
 		next->rnetwork[1] = stubHops->rnetwork[1];
 		next->rnetwork[2] = stubHops->rnetwork[2];
 		next->rnetwork[3] = stubHops->rnetwork[3];
 
-		next->rsubmask[0] = stubHops->rsubmask[0];
+		COPY_IP(next->rsubmask, stubHops->rsubmask);
+		/*next->rsubmask[0] = stubHops->rsubmask[0];
 		next->rsubmask[1] = stubHops->rsubmask[1];
 		next->rsubmask[2] = stubHops->rsubmask[2];
-		next->rsubmask[3] = stubHops->rsubmask[3];
+		next->rsubmask[3] = stubHops->rsubmask[3];*/
 
 		//printf("Id stored inside stubHops: %d\n", stubHops->assNode);
 
 
 		id = calcNextHop(stubHops->assNode, distance, previousNode);
 
-		next->nh_ip[0] = node[id].ip[0];
+		COPY_IP(next->nh_ip, node[id].ip);
+		/*next->nh_ip[0] = node[id].ip[0];
 		next->nh_ip[1] = node[id].ip[1];
 		next->nh_ip[2] = node[id].ip[2];
-		next->nh_ip[3] = node[id].ip[3];
+		next->nh_ip[3] = node[id].ip[3];*/
+
+		COPY_IP(next->interfaceIp, node[previousNode[id]].ip);
 
 		stubHops = stubHops->next;
 
@@ -351,7 +342,8 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 
 void printNextHopList(NextHop *list){
 	while(list!=NULL){
-		printf("Network %s with submask %s has next hop going to %s\n\n", getucharstr(list->rnetwork), getucharstr(list->rsubmask), getucharstr(list->nh_ip));
+		printf("Network %s with submask %s has next hop going to %s\n", getucharstr(list->rnetwork), getucharstr(list->rsubmask), getucharstr(list->nh_ip));
+		printf("\t| Interface ip to send through: %s\n\n", getucharstr(list->interfaceIp));
 		list = list->next;
 	}
 }

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "grouter.h"
+#include <string.h>
 
 #define TYPE_ANY_TO_ANY		2
 #define TYPE_STUB			3
@@ -39,6 +40,8 @@ typedef struct _NextHop{
 	uchar rsubmask[4];
 	uchar rnetwork[4];
 	uchar nh_ip[4];
+
+	uchar interfaceIp[4];
 
 	NextHop *next;
 }NextHop;
