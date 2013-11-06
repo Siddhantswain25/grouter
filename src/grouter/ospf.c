@@ -160,8 +160,10 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
 		// Run Dijkstra's Algorithm on the new graph.
-		//NextHop *nh = calculateDijkstra(graph);
-		//printNextHops(nh);
+		uchar interfaces[MAX_INTERFACES][4];
+		int numInterfaces = getInterfaces(interfaces);
+		NextHop *nh = calculateDijkstra(graph, interfaces, numInterfaces);
+		printNextHops(nh);
 
 		// TODO update forwarding table if necessary.
 	}
@@ -273,8 +275,7 @@ void OSPFSendLSA() {
 		curLink->empty = 0;
 		curLink->empty2 = 0;
 
-		// TODO handle stub case.
-		curLink->link_type = 2; //these are all any-to-any = 2
+		curLink->link_type = (my_nbours[i].is_stub) ? 3 : 2;
 	}
 
 	//builds ospf header and calculates chksum
