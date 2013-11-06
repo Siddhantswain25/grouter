@@ -40,6 +40,18 @@ void OSPFInit() {
 	}
 }
 
+void updateRoutingTable() {
+	// Run Dijkstra's Algorithm on the new graph.
+		uchar interfaces[MAX_INTERFACES][4];
+		int numInterfaces = getInterfaces(interfaces);
+		NextHop *nh = calculateDijkstra(graph, interfaces, numInterfaces);
+		//printNextHops(nh);
+		//printNextHopList(nh);
+
+		// TODO update forwarding table if necessary.
+}
+		
+
 void OSPFProcessPacket(gpacket_t *in_pkt) {
 	ip_packet_t *ip_pkt = (ip_packet_t *) in_pkt->data.data;
 	int iphdrlen = ip_pkt->ip_hdr_len * 4; //move ptr to begin of he ospf header
@@ -76,13 +88,6 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 
 	exist = addNeighbourEntry(in_pkt->frame.src_ip_addr,
 			gHtonl(tmpbuf, ospfhdr->ip_src));
-	if (exist > 0) {
-		//reset timer
-		verbose(2, "NOT IMPLEMENTED: RESET TIMER \n");
-	} else {
-		//create new timer
-		verbose(2, "NOT IMPLEMENTED: CREATE NEW TIMER \n");
-	}
 
 	// We don't added the neighbours of our neighbours to our list
 	// but we check to see if they have us on their list, if YES, we have a bidirectional connection
@@ -94,11 +99,19 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 		 hellomsg->nbours_addr[i]));*/
 		if (COMPARE_IP(in_pkt->frame.src_ip_addr, hellomsg->nbours_addr[i])
 				== 0) {
+			
 			//flip bidirectional flag
 			int result = setBidirectionalFlag(gHtonl(tmpbuf, ospfhdr->ip_src),
 					TRUE);
-			//TODO: send to next step
-			//OSPFSendLSA();
+			if(result == 1) {
+				printf("[OSPFProcessHelloMessage]:: New bidirectional connection\n");
+				//bcast this change
+				OSPFSendLSA();
+				//we don't run dijkstra and update routing tables here
+				//bc is done when receiving our on LSA bcast
+			}
+			
+			
 		}
 	}
 	//if nothing changes, do nothing
@@ -120,10 +133,6 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 			+ OSPF_LSA_HEADER_SIZE);
 	int seqNo = lsahdr->seq_num;
 	uchar *src_ip = gNtohl(src_ip_buf, lsahdr->ads_router);
-
-	verbose(2,
-			"[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d",
-			IP2Dot(tmpbuf, src_ip), seqNo);
 
 	printf(
 			"[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
@@ -149,8 +158,8 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 			// We've received from this sender, but this is a new LSA.
 			printf("[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
 			found->seq_Numb = seqNo;
-			parseLinks(lsa, found);
-			printGraph(graph);
+			//parseLinks(lsa, found);
+			//printGraph(graph);
 		}
 
 
@@ -159,13 +168,8 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
-		// Run Dijkstra's Algorithm on the new graph.
-		uchar interfaces[MAX_INTERFACES][4];
-		int numInterfaces = getInterfaces(interfaces);
-		NextHop *nh = calculateDijkstra(graph, interfaces, numInterfaces);
-		printNextHops(nh);
-
-		// TODO update forwarding table if necessary.
+		//run dijkstra and update fwd tables
+		//updateRoutingTable();
 	}
 	else {
 		printf("Received duplicate packet, not broadcasting!\n");
@@ -313,16 +317,18 @@ void OSPFNeighbourLivenessChecker() {
 			if (nbours_tbl[i].is_empty == FALSE) {
 				gettimeofday(&second, NULL);
 				elapsed_time = subTimeVal(&second, &nbours_tbl[i].tv);
-				verbose(3, "Received hello %6.3f ms ago from %s\n",
+				verbose(3, "[OSPFNeighbourLivenessChecker]:: Received hello %6.3f ms ago from %s\n",
 						elapsed_time,
 						IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
 				//COPY_IP(buf[count], nbours_tbl[i].nbour_ip_addr);
 				if (elapsed_time > 40000) {
 					deleteNeighbourEntry(nbours_tbl[i].nbour_ip_addr);
-					verbose(3, "Neighbour %s is dead. deleting...",
+					verbose(3, "[OSPFNeighbourLivenessChecker]:: Neighbour %s is dead. deleting...",
 							IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
 
-					//TODO: SEND LSA
+					printf("[OSPFNeighbourLivenessChecker]:: LSA bcast bc a neighbour was removed\n");
+					//bcast this change
+					OSPFSendLSA();
 				}
 
 			}
@@ -347,29 +353,26 @@ void OSPFSendHello() {
 	ospf_hello_t *hellomsg = (ospf_hello_t *) ((uchar *) ospfhdr
 			+ OSPF_HEADER_SIZE);
 
-	uchar netmask[] =
-			OSPF_NETMASK_ADDR; //for debug
-					COPY_IP(hellomsg->netmask, gHtonl(tmpbuf, netmask));
-					hellomsg->options = 0;// options always = 0
-					hellomsg->priority = 0;// always = 0
-					hellomsg->hello_interval = 10;// always = 10
-					hellomsg->dead_interval = 40;// always = 40
+	uchar netmask[] = OSPF_NETMASK_ADDR; //for debug
+	COPY_IP(hellomsg->netmask, gHtonl(tmpbuf, netmask));
+	hellomsg->options = 0;// options always = 0
+	hellomsg->priority = 0;// always = 0
+	hellomsg->hello_interval = 10;// always = 10
+	hellomsg->dead_interval = 40;// always = 40
 
-					//set designed router addr for 0.0.0.0
-					uchar designed_router_addr[] = OSPF_ZERO_ADDR;//for debug
-					COPY_IP(hellomsg->designed_router_addr, gHtonl(tmpbuf, designed_router_addr));
+	//set designed router addr for 0.0.0.0
+	uchar designed_router_addr[] = OSPF_ZERO_ADDR;//for debug
+	COPY_IP(hellomsg->designed_router_addr, gHtonl(tmpbuf, designed_router_addr));
 
-					//set backup router addr for 0.0.0.0
-					uchar bkp_router_addr[] = OSPF_ZERO_ADDR;
-					COPY_IP(hellomsg->bkp_router_addr, gHtonl(tmpbuf, bkp_router_addr));
+	//set backup router addr for 0.0.0.0
+	uchar bkp_router_addr[] = OSPF_ZERO_ADDR;
+	COPY_IP(hellomsg->bkp_router_addr, gHtonl(tmpbuf, bkp_router_addr));
 
-					//added list of neighbours to packet
-					uchar list_nbours[MAX_INTERFACES][4];
-					int num_of_neighbours, i
-=0;num_of_neighbours =
-findAllNeighboursIPs (
-	list_nbours
-)	;
+	//added list of neighbours to packet
+	uchar list_nbours[MAX_INTERFACES][4];
+	int num_of_neighbours, i=0;
+	num_of_neighbours =
+	findAllNeighboursIPs (list_nbours);
 
 	if (num_of_neighbours > 0) {
 		for (i = 0; i < num_of_neighbours; i++) {
@@ -400,6 +403,7 @@ void NeighboursTableInit() {
 	return;
 }
 
+/* return 1 if flag was flipped. 0 otherwise*/
 int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag) {
 	int index;
 	char tmpbuf[MAX_TMPBUF_LEN];
@@ -408,8 +412,10 @@ int setBidirectionalFlag(uchar *nbour_ip_addr, bool flag) {
 			IP2Dot(tmpbuf, nbour_ip_addr));
 	index = findNeighbourIndex(nbour_ip_addr);
 	if (index >= 0) {
-		nbours_tbl[index].bidirectional = flag;
-		return 1; //we return 1, bc changed is good
+		if(nbours_tbl[index].bidirectional != flag) {
+			nbours_tbl[index].bidirectional = flag;
+			return 1; //we return 1, bc changed is good
+		}
 	}
 	return 0;
 }
@@ -579,4 +585,8 @@ void printNeighboursTable() {
 	}
 	printf("-----------------------------------------------------------------\n");
 	return;
+}
+
+void staticPrintGraph() {
+	printGraph(graph);
 }
