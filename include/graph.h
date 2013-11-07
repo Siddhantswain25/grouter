@@ -81,5 +81,7 @@ void printGraph(Node *graph);
 void printNextHops(NextHop *head);
 Node *addNode(Node *graph, Node *newNode);
 Link *addLink(Link *list, Link *newLink);
+Link *removeLinkByLinkData(Link *list, uchar linkData[]);
+Node *removeNodeByIP(Node *graph, uchar ip[]);
 
 #endif /* GRAPH_H_ */

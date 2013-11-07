@@ -575,3 +575,55 @@ Link *addLink(Link *list, Link *newLink) {
 	else { newLink->next = NULL; }
 	return newLink;
 }
+
+/* Removes the first link in the list of links with the specified link data and returns the head of the list */
+Link *removeLinkByLinkData(Link *list, uchar linkData[]) {
+	Link *cur = list;
+
+	if (list == NULL) return list;
+
+	if (!COMPARE_IP(cur->linkData, linkData)) {
+		// Remove the head of the list
+		list = list->next;
+		free(cur);
+		return list;
+	}
+
+	while (cur->next != NULL) {
+		Link *prev = cur;
+		cur = cur->next;
+		if (!COMPARE_IP(cur->linkData, linkData)) {
+			prev->next = cur->next;
+			free(cur);
+			break;
+		}
+	}
+
+	return list;
+}
+
+/* Removes the first node in the graph with the specified ip and returns the head of the graph */
+Node *removeNodeByIP(Node *graph, uchar ip[]) {
+	Node *cur = graph;
+
+	if (graph == NULL) return graph;
+
+	if (!COMPARE_IP(cur->ip, ip)) {
+		// Remove the head of the list
+		graph = graph->next;
+		free(cur);
+		return graph;
+	}
+
+	while (cur->next != NULL) {
+		Node *prev = cur;
+		cur = cur->next;
+		if (!COMPARE_IP(cur->ip, ip)) {
+			prev->next = cur->next;
+			free(cur);
+			break;
+		}
+	}
+
+	return graph;
+}

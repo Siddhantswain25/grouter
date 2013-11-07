@@ -154,6 +154,34 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 					TRUE);
 			if(result == 1) {
 				printf("[OSPFProcessHelloMessage]:: New bidirectional connection\n");
+
+				uchar *incomingInterface = in_pkt->frame.src_ip_addr;
+				uchar *senderIP = ospfhdr->ip_src;
+				// We can add this node to our graph.
+				// Find the node in the graph corresponding to the interface we received on
+				Node *found = getNodeByIP(graph, incomingInterface);
+				if (found == NULL) {
+					// Create a new node
+					found = malloc(sizeof(Node));
+					COPY_IP(found->ip, incomingInterface);
+					found->seq_Numb = 0;
+					found->list = NULL;
+
+					graph = addNode(graph, found);
+				}
+				// Add this neighbor as a connection
+				Link *newLink = malloc(sizeof(Link));
+				COPY_IP(newLink->linkId, gNtohl(tmpbuf, senderIP));
+				newLink->linkId[0] = IP_ZERO_PREFIX;
+				COPY_IP(newLink->linkData, gNtohl(tmpbuf, senderIP));
+				newLink->linkType = TYPE_ANY_TO_ANY;
+				found->list = addLink(found->list, newLink);
+
+				printf("[OSPFProcessHelloMessage]:: Added new neighbor to my graph:\n");
+				printf("Interface: %s\n", IP2Dot(tmpbuf, found->ip));
+				printf("Neighbor link ID: %s\n", IP2Dot(tmpbuf, newLink->linkId));
+				printf("Neighbor link Data: %s\n", IP2Dot(tmpbuf, newLink->linkData));
+
 				//bcast this change
 				OSPFSendLSA();
 				//TODO: change this!
@@ -188,41 +216,48 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 			"[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
 			IP2Dot(tmpbuf, src_ip), seqNo);
 
-	// Check if we've seen this advertisement.
-	Node *found = getNodeByIP(graph, src_ip);
-	if (found == NULL || found->seq_Numb < seqNo) {
-		// We haven't seen this LSA yet
-		printf("[OSPFProcessLSA]:: Haven't seen this LSA before\n");
-		if (found == NULL) {
-			printf("[OSPFProcessLSA]:: Haven't received from this sender yet\n");
-			found = malloc(sizeof(Node));
-			COPY_IP(found->ip, src_ip);
-			found->seq_Numb = seqNo;
-			found->list = NULL;
-			parseLinks(lsa, found);
+	// Drop packets that are from me
+	if (!hasInterface(src_ip)) {
 
-			graph = addNode(graph, found);
-			printGraph(graph);
+		// Check if we've seen this advertisement.
+		Node *found = getNodeByIP(graph, src_ip);
+		if (found == NULL || found->seq_Numb < seqNo) {
+			// We haven't seen this LSA yet
+			printf("[OSPFProcessLSA]:: Haven't seen this LSA before\n");
+			if (found == NULL) {
+				printf("[OSPFProcessLSA]:: Haven't received from this sender yet\n");
+				found = malloc(sizeof(Node));
+				COPY_IP(found->ip, src_ip);
+				found->seq_Numb = seqNo;
+				found->list = NULL;
+				parseLinks(lsa, found);
+
+				graph = addNode(graph, found);
+				printGraph(graph);
+			}
+			else {
+				// We've received from this sender, but this is a new LSA.
+				printf("[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
+				found->seq_Numb = seqNo;
+				//parseLinks(lsa, found);
+				//printGraph(graph);
+			}
+
+
+			// Broadcast the packet
+			printf("Broadcasting this packet\n");
+
+			IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
+
+			//run dijkstra and update fwd tables
+			updateRoutingTable();
 		}
 		else {
-			// We've received from this sender, but this is a new LSA.
-			printf("[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
-			found->seq_Numb = seqNo;
-			//parseLinks(lsa, found);
-			//printGraph(graph);
+			printf("Received duplicate packet, not broadcasting!\n");
 		}
-
-
-		// Broadcast the packet
-		printf("Broadcasting this packet\n");
-
-		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
-
-		//run dijkstra and update fwd tables
-		updateRoutingTable();
 	}
 	else {
-		printf("Received duplicate packet, not broadcasting!\n");
+		printf("I am the sender, ignoring this packet\n");
 	}
 }
 
@@ -364,7 +399,7 @@ void OSPFNeighbourLivenessChecker() {
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	while (1) {
 		for (i = 0; i < MAX_INTERFACES; i++) {
-			if (nbours_tbl[i].is_empty == FALSE) {
+			if (nbours_tbl[i].is_empty == FALSE && !nbours_tbl[i].is_stub) {
 				gettimeofday(&second, NULL);
 				elapsed_time = subTimeVal(&second, &nbours_tbl[i].tv);
 				verbose(3, "[OSPFNeighbourLivenessChecker]:: Received hello %6.3f ms ago from %s\n",
@@ -372,13 +407,24 @@ void OSPFNeighbourLivenessChecker() {
 						IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
 				//COPY_IP(buf[count], nbours_tbl[i].nbour_ip_addr);
 				if (elapsed_time > 40000) {
+					// Remove from graph
+					Node *interface = getNodeByIP(graph, nbours_tbl[i].iface_ip_addr);
+					printf("Trying to remove %s from graph\n", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
+					interface->list = removeLinkByLinkData(interface->list, nbours_tbl[i].nbour_ip_addr);
+
+					// Remove node if no links lefts
+					if (interface->list == NULL) {
+						removeNodeByIP(graph, nbours_tbl[i].iface_ip_addr);
+					}
+
+					// Remove from neighbour table
 					deleteNeighbourEntry(nbours_tbl[i].nbour_ip_addr);
 					verbose(3, "[OSPFNeighbourLivenessChecker]:: Neighbour %s is dead. deleting...",
 							IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
 
 					printf("[OSPFNeighbourLivenessChecker]:: LSA bcast bc a neighbour was removed\n");
 					//bcast this change
-					//OSPFSendLSA();
+					OSPFSendLSA();
 				}
 
 			}
@@ -421,8 +467,7 @@ void OSPFSendHello() {
 	//added list of neighbours to packet
 	uchar list_nbours[MAX_INTERFACES][4];
 	int num_of_neighbours, i=0;
-	num_of_neighbours =
-	findAllNeighboursIPs (list_nbours);
+	num_of_neighbours = findAllNeighboursIPs (list_nbours);
 
 	if (num_of_neighbours > 0) {
 		for (i = 0; i < num_of_neighbours; i++) {
@@ -540,6 +585,27 @@ void deleteNeighbourEntry(uchar *nbour_ip_addr) {
 	verbose(2, "[deleteNeighbourEntry]:: Can't find entry for neighbour: %s\n",
 			IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
 	return;
+}
+
+/* Given the index of the stub neighbor, adds it to the graph (adds a link to the node representing the interface) */
+void addStubToGraph(int index) {
+	nbour_entry_t *nbour = &(nbours_tbl[index]);
+	Node *found = getNodeByIP(graph, nbour->iface_ip_addr);
+	if (found == NULL) {
+		found = malloc(sizeof(Node));
+		found->seq_Numb = 0;
+		COPY_IP(found->ip, nbour->iface_ip_addr);
+		found->list = NULL;
+
+		graph = addNode(graph, found);
+	}
+	Link *newLink = malloc(sizeof(Link));
+	COPY_IP(newLink->linkId, nbour->nbour_ip_addr);
+	uchar netmask[] = IP_BCAST_ADDR;
+	netmask[0] = IP_ZERO_PREFIX;
+	COPY_IP(newLink->linkData, netmask);
+	newLink->linkType = TYPE_STUB;
+	found->list = addLink(found->list, newLink);
 }
 
 /*

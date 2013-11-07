@@ -120,6 +120,7 @@ void OSPFprintTopology();
 /*Neighbours management*/
 void NeighboursTableInit();
 int addNeighbourEntry(uchar *iface_ip_addr, uchar *nbour_ip_addr, int interface_id);
+void addStubToGraph(int index);
 void deleteNeighbourEntry(uchar *nbour_ip_addr);
 int findNeighbourIndex(uchar *nbour_ip_addr);
 int findAllNeighboursIPs(uchar buf[][4]);
