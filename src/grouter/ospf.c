@@ -121,8 +121,8 @@ void OSPFProcessPacket(gpacket_t *in_pkt) {
 }
 
 void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
-	verbose(2,
-			"[OSPFProcessHelloMessage]:: Received Hello Message. processing... \n");
+	verbose(2,"[OSPFProcessHelloMessage]:: Received Hello Message. processing... \n");
+	//printGPacket(in_pkt, 3, "IP_ROUTINE");
 	char tmpbuf[MAX_TMPBUF_LEN];
 	ip_packet_t *ip_pkt = (ip_packet_t *) in_pkt->data.data;
 	ospfhdr_t *ospfhdr = (ospfhdr_t *) ((uchar *) ip_pkt
@@ -154,11 +154,31 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 					TRUE);
 			if(result == 1) {
 				printf("[OSPFProcessHelloMessage]:: New bidirectional connection\n");
+				/*
+				printf("Updating Routing tables with new/existing neighbour\n");
+				uchar rnetwork[4];
+				uchar submask[4];
+				uchar next_hop[4];
+				int iface_id = in_pkt->frame.src_interface; //interface id
+				printf("InterfaceID = %d\n", iface_id);
+				COPY_IP(rnetwork, gNtohl(tmpbuf+10,in_pkt->frame.src_ip_addr));
+				//set last byte to 0
+				rnetwork[3] = 0;
+				//printf("NEW rnetwork : %s \n", IP2Dot(tmpbuf+5, in_pkt->frame.src_ip_addr));
+				//printf("NEW rnetwork : %s \n", IP2Dot(tmpbuf+20, rnetwork));
+				printf("NEW rnetwork : %s \n", IP2Dot(tmpbuf+20,  gNtohl(tmpbuf+100,rnetwork)));
+				
+				COPY_IP(submask, gNtohl(tmpbuf+30, hellomsg->netmask));
+				printf("NEW submask : %s \n", IP2Dot(tmpbuf+50, gNtohl(tmpbuf,hellomsg->netmask)));
+				
+				COPY_IP(next_hop, gNtohl(tmpbuf+60,in_pkt->frame.nxth_ip_addr));
+				printf("NEW next_hop : %s \n", IP2Dot(tmpbuf+70, gNtohl(tmpbuf,in_pkt->frame.nxth_ip_addr)));
+
+				addRouteEntry(route_tbl, gNtohl(tmpbuf,rnetwork), gNtohl(tmpbuf+10,next_hop), iface_id);
+				*/
 				//bcast this change
 				OSPFSendLSA();
-				//TODO: change this!
-				//we don't run dijkstra and update routing tables here
-				//bc is done when receiving our on LSA bcast
+				
 			}
 			
 			
@@ -379,10 +399,8 @@ void OSPFNeighbourLivenessChecker() {
 					//bcast this change
 					OSPFSendLSA();
 				}
-
 			}
 		}
-
 		usleep(5000000); //5seconds
 	}
 }

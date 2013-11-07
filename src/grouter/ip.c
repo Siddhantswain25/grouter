@@ -402,7 +402,7 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 				}
 
 				//send to outgoing with each dst_ip different
-				IPOutgoingPacket(cp_pkt, dst_ip, size, newflag, OSPF_PROTOCOL);
+				IPBcastOutgoingPacket(cp_pkt, dst_ip, size, newflag, OSPF_PROTOCOL,i+1, iface_ip[i]);
 			}
 		}
 		return TRUE;
@@ -410,6 +410,124 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 		
 	return FALSE; //if no interfaces available
 }
+
+int IPBcastOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int src_prot, int iface_id, uchar iface_ip_addr[])
+{
+    ip_packet_t *ip_pkt = (ip_packet_t *)pkt->data.data;
+	ushort cksum;
+	char tmpbuf[MAX_TMPBUF_LEN];
+	int status;
+
+
+	ip_pkt->ip_ttl = 64;                        // set TTL to default value
+	ip_pkt->ip_cksum = 0;                       // reset the checksum field
+	ip_pkt->ip_prot = src_prot;  // set the protocol field
+
+
+	if (newflag == 0)
+	{
+		//if broadcast packet we set the address for 255.255.255.255
+		if(pkt->frame.bcast == TRUE) 
+		{
+			printf("[DEBUG] Retransmission of LSA pkt, broadcasting\n");
+			//set ip to find route eg. 192.168.2.255
+			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, dst_ip));
+
+			// find the nexthop and interface and fill them in the "meta" frame
+			// NOTE: the packet itself is not modified by this lookup!
+			//if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),
+			//		   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)
+			//		   return EXIT_FAILURE;
+			pkt->frame.dst_interface = iface_id;
+
+
+			//find interface IP
+			/*if ((status = findInterfaceIP(MTU_tbl, pkt->frame.dst_interface,
+					      iface_ip_addr)) == EXIT_FAILURE) {
+				error("[IPOutgoingPacket]:: couldn't find interface ");
+				return EXIT_FAILURE;
+			}*/
+			// the outgoing packet should have the interface IP as source
+			COPY_IP(ip_pkt->ip_src, gHtonl(tmpbuf, iface_ip_addr));
+
+			//set broadcast IP = 255.255.255.255
+			uchar bcast_ip[] = IP_BCAST_ADDR;
+			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, bcast_ip));
+		}
+		
+	} 
+	else if (newflag == 1)
+	{
+		// non REPLY PACKET -- this is a new packet; set all fields
+		ip_pkt->ip_version = 4;
+		ip_pkt->ip_hdr_len = 5;
+		ip_pkt->ip_tos = 0;
+		ip_pkt->ip_identifier = IP_OFFMASK & random();
+		RESET_DF_BITS(ip_pkt->ip_frag_off);
+		RESET_MF_BITS(ip_pkt->ip_frag_off);
+		ip_pkt->ip_frag_off = 0;
+
+		COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, dst_ip));
+		ip_pkt->ip_pkt_len = htons(size + ip_pkt->ip_hdr_len * 4);
+		//printGPacket(pkt, 3, "IP_ROUTINE"); //for debug
+		verbose(2, "[IPOutgoingPacket]:: lookup next hop ");
+		// find the nexthop and interface and fill them in the "meta" frame
+		// NOTE: the packet itself is not modified by this lookup!
+		/*if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),
+				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE) {
+			error("[IPOutgoingPacket]:: couldn't find route entry ");
+			return EXIT_FAILURE;
+		}*/
+		pkt->frame.dst_interface = iface_id;
+
+		verbose(2, "[IPOutgoingPacket]:: lookup MTU of nexthop");
+		// lookup the IP address of the destination interface..
+		/*if ((status = findInterfaceIP(MTU_tbl, pkt->frame.dst_interface,
+					      iface_ip_addr)) == EXIT_FAILURE) {
+			error("[IPOutgoingPacket]:: couldn't find interface ");
+			return EXIT_FAILURE;
+		}*/
+					      
+		// the outgoing packet should have the interface IP as source
+		COPY_IP(ip_pkt->ip_src, gHtonl(tmpbuf, iface_ip_addr));
+		
+		//if broadcast packet we set the address for 255.255.255.255
+		if(pkt->frame.bcast == TRUE) 
+		{
+			//set broadcast IP = 
+			uchar bcast_ip[] = IP_BCAST_ADDR;
+			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, bcast_ip));
+		}
+		verbose(2, "[IPOutgoingPacket]:: almost one processing the IP header.");
+	} else
+	{
+		error("[IPOutgoingPacket]:: unknown outgoing packet action.. packet discarded ");
+		return EXIT_FAILURE;
+	}
+
+	//	compute the new checksum
+	cksum = checksum((uchar *)ip_pkt, ip_pkt->ip_hdr_len*2);
+	ip_pkt->ip_cksum = htons(cksum);
+	pkt->data.header.prot = htons(IP_PROTOCOL);
+
+	//FOR DEBUG
+	/*if(src_prot == OSPF_PROTOCOL) //specific modifications for OSPF_PROTOCOL
+	{
+		ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
+		if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE && 
+			(COMPARE_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip_addr))) == 0) {
+			
+		
+			//return EXIT_SUCCESS;
+		}
+	}*/
+	//printGPacket(pkt, 3, "IP_ROUTINE");
+	IPSend2Output(pkt);
+	verbose(2, "[IPOutgoingPacket]:: IP packet sent to output queue.. ");
+	return EXIT_SUCCESS;
+}
+
+
 
 /*
  * this function processes the IP packets that are reinjected into the

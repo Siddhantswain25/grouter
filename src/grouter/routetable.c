@@ -81,8 +81,11 @@ void addRouteEntry(route_entry_t route_tbl[], uchar* nwork, uchar* nmask, uchar*
 	// First check if the entry is already in the table, if it is, update it
 	for (i = 0; i < MAX_ROUTES; i++)
 	{
+		if(route_tbl != NULL) printf("route table is ok.\n");
+
 		if (route_tbl[i].is_empty == TRUE)
 		{
+			printf("[%d] is free\n", i );
 			if (ifree < 0) ifree = i;
 
 		} else if ((COMPARE_IP(nwork, route_tbl[i].network)) == 0)
@@ -104,7 +107,7 @@ void addRouteEntry(route_entry_t route_tbl[], uchar* nwork, uchar* nmask, uchar*
 		ifree = rtbl_replace_indx;
 		rtbl_replace_indx = (rtbl_replace_indx + 1) % MAX_ROUTES;
 	}
-
+	printf("copying stuff\n");
 	COPY_IP(route_tbl[ifree].network, nwork);
 	COPY_IP(route_tbl[ifree].netmask, nmask);
 	COPY_IP(route_tbl[ifree].nexthop, nhop);
