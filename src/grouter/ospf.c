@@ -212,8 +212,7 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 	int seqNo = lsahdr->seq_num;
 	uchar *src_ip = gNtohl(src_ip_buf, lsahdr->ads_router);
 
-	printf(
-			"[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
+	printf("[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
 			IP2Dot(tmpbuf, src_ip), seqNo);
 
 	// Drop packets that are from me
