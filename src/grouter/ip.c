@@ -380,7 +380,7 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 
 				//modify if necessary
 				ip_packet_t *ip_pkt = (ip_packet_t *)cp_pkt->data.data;
-				
+
 				if(src_prot == OSPF_PROTOCOL) //specific modifications for OSPF_PROTOCOL
 				{
 					ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
@@ -391,7 +391,6 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 					if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE) {
 						ospf_lsa_hdr_t *lsahdr = (ospf_lsa_hdr_t *)((uchar *)ospfhdr + OSPF_HEADER_SIZE);
 
-
 						if (newflag == 1) {
 							// This is a packet originated by me
 							//set OSPF header source & link state ID & advertising router on LSA header
@@ -400,12 +399,10 @@ int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_pr
 							COPY_IP(lsahdr->ads_router, gHtonl(tmpbuf, iface_ip[i]));
 						}
 					}
-					//printf("###OSPF: Source###  : %s\n", IP2Dot(tmpbuf, gNtohl((tmpbuf+20), ospfhdr->ip_src)));
-					
 				}
-				//send to outgoing with each dst_ip different
 
-				IPOutgoingPacket(cp_pkt, dst_ip, size, 1, OSPF_PROTOCOL);
+				//send to outgoing with each dst_ip different
+				IPOutgoingPacket(cp_pkt, dst_ip, size, newflag, OSPF_PROTOCOL);
 			}
 		}
 		return TRUE;
@@ -438,16 +435,42 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 
 	if (newflag == 0)
 	{
-		COPY_IP(ip_pkt->ip_dst, ip_pkt->ip_src); 		    // set dst to original src
-		COPY_IP(ip_pkt->ip_src, gHtonl(tmpbuf, pkt->frame.src_ip_addr));    // set src to me
+		//if broadcast packet we set the address for 255.255.255.255
+		if(pkt->frame.bcast == TRUE) 
+		{
+			//set ip to find route eg. 192.168.2.255
+			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, dst_ip));
 
-		// find the nexthop and interface and fill them in the "meta" frame
-		// NOTE: the packet itself is not modified by this lookup!
-		if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),
+			// find the nexthop and interface and fill them in the "meta" frame
+			// NOTE: the packet itself is not modified by this lookup!
+			if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),
+					   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)
+					   return EXIT_FAILURE;
+
+			//find interface IP
+			if ((status = findInterfaceIP(MTU_tbl, pkt->frame.dst_interface,
+					      iface_ip_addr)) == EXIT_FAILURE) {
+				error("[IPOutgoingPacket]:: couldn't find interface ");
+				return EXIT_FAILURE;
+			}
+			// the outgoing packet should have the interface IP as source
+			COPY_IP(ip_pkt->ip_src, gHtonl(tmpbuf, iface_ip_addr));
+
+			//set broadcast IP = 255.255.255.255
+			uchar bcast_ip[] = IP_BCAST_ADDR;
+			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, bcast_ip));
+		} else {
+			COPY_IP(ip_pkt->ip_dst, ip_pkt->ip_src);  // set dst to original src
+			COPY_IP(ip_pkt->ip_src, gHtonl(tmpbuf, pkt->frame.src_ip_addr));    // set src to me
+
+			// find the nexthop and interface and fill them in the "meta" frame
+			// NOTE: the packet itself is not modified by this lookup!
+			if (findRouteEntry(route_tbl, gNtohl(tmpbuf, ip_pkt->ip_dst),
 				   pkt->frame.nxth_ip_addr, &(pkt->frame.dst_interface)) == EXIT_FAILURE)
 				   return EXIT_FAILURE;
-
-	} else if (newflag == 1)
+		}
+	} 
+	else if (newflag == 1)
 	{
 		// non REPLY PACKET -- this is a new packet; set all fields
 		ip_pkt->ip_version = 4;
@@ -499,6 +522,18 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 	cksum = checksum((uchar *)ip_pkt, ip_pkt->ip_hdr_len*2);
 	ip_pkt->ip_cksum = htons(cksum);
 	pkt->data.header.prot = htons(IP_PROTOCOL);
+
+	//FOR DEBUG
+	if(src_prot == OSPF_PROTOCOL) //specific modifications for OSPF_PROTOCOL
+	{
+		ospfhdr_t *ospfhdr = (ospfhdr_t *)((uchar *)ip_pkt + ip_pkt->ip_hdr_len*4);
+		if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE && 
+			(COMPARE_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip_addr))) == 0) {
+			printGPacket(pkt, 3, "IP_ROUTINE");
+			printf("[DEBUG] Retransmission of LSA pkt, not broadcasting\n");
+			//return EXIT_SUCCESS;
+		}
+	}
 	
 	IPSend2Output(pkt);
 	verbose(2, "[IPOutgoingPacket]:: IP packet sent to output queue.. ");

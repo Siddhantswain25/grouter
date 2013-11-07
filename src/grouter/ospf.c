@@ -184,8 +184,7 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 	int seqNo = lsahdr->seq_num;
 	uchar *src_ip = gNtohl(src_ip_buf, lsahdr->ads_router);
 
-	printf(
-			"[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
+	printf("[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
 			IP2Dot(tmpbuf, src_ip), seqNo);
 
 	// Check if we've seen this advertisement.
@@ -215,9 +214,9 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 
 		// Broadcast the packet
 		printf("Broadcasting this packet\n");
-
+		
 		IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
-
+	
 		//run dijkstra and update fwd tables
 		updateRoutingTable();
 	}
@@ -378,7 +377,7 @@ void OSPFNeighbourLivenessChecker() {
 
 					printf("[OSPFNeighbourLivenessChecker]:: LSA bcast bc a neighbour was removed\n");
 					//bcast this change
-					//OSPFSendLSA();
+					OSPFSendLSA();
 				}
 
 			}
