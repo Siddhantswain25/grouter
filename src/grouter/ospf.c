@@ -45,6 +45,7 @@ void OSPFInit() {
 
 void updateRoutingTable() {
 
+	verbose(2,"---------- updateRoutingTable() ---------- \n");
 	char tmpbuf[MAX_TMPBUF_LEN];
 	NextHop *nh; //nh = head
 	uchar interfaces[MAX_INTERFACES][4];
@@ -57,32 +58,34 @@ void updateRoutingTable() {
 	uchar zero_ip[] = OSPF_ZERO_ADDR;
 	RouteTableInit(route_tbl);
 	while (cur != NULL) {
-		printf("Adding Route for: \n");
-		printf("Network Address\tSubnet Mask\tNext Hop\n");
-		printf("%s\t", IP2Dot(tmpbuf, cur->rnetwork));
-		printf("%s\t", IP2Dot(tmpbuf, cur->rsubmask));
-		printf("%s\t\n", IP2Dot(tmpbuf, cur->nh_ip));
+
 		//check if next hop is diff than 0.0.0.0
 		int index = -1;
 		if ((COMPARE_IP(cur->nh_ip, zero_ip)) == 0) 
 		{
-			printf("IP is 0.0.0.0\n");
+			verbose(2, "IP is 0.0.0.0\n");
 			//find neighbour using next_hop ip
 			
-			printf("HACK IP : %s\t", IP2Dot(tmpbuf,cur->rsubmask));
+			verbose(2, "HACK IP : %s\t", IP2Dot(tmpbuf,cur->rsubmask));
 			index = findNeighbourIndex(cur->rsubmask);
 		} else {
-			printf("IP is NOT 0.0.0.0\n");
+			verbose(2, "IP is NOT 0.0.0.0\n");
 			//find neighbour using next_hop ip
 			index = findNeighbourIndex(cur->nh_ip);
 		}
 		if (index >= 0) {
-			printf("found Neighbour at [%d]\n", index );
+			verbose(2, "found Neighbour at [%d]\n", index );
 			//get interface Id
 			int iface_id = nbours_tbl[index].interface_id;
+			verbose(2,"Adding Route for: \n");
+			verbose(2, "Network Address\tSubnet Mask\tNext Hop\tiface_id\n");
+			verbose(2, "%s\t", IP2Dot(tmpbuf, cur->rnetwork));
+			verbose(2, "%s\t", IP2Dot(tmpbuf, cur->rsubmask));
+			verbose(2, "%s\t", IP2Dot(tmpbuf, cur->nh_ip));
+			verbose(2, "%d\n", iface_id);
 			
 			if(iface_id > 0) {
-				printf("found Interface : %d\n", iface_id);
+				verbose(2, "found Interface : %d\n", iface_id);
 				//add route to fwd table
 				Dot2IP("255.255.255.0", cur->rsubmask);
 				addRouteEntry(route_tbl, cur->rnetwork, cur->rsubmask, cur->nh_ip, iface_id);
@@ -91,10 +94,9 @@ void updateRoutingTable() {
 			}
 			
 		} else {
-			printf("Couldn't find this next hop neighour\n");
+			printf("Couldn't find this next hop neighour : %s\n",IP2Dot(tmpbuf, cur->nh_ip));
 		}
 		
-		//TODO: if next hop 0.0.0.0 do we need to update the route table?
 		cur = cur->next;
 	}
 	//How do we get the interface id?
@@ -152,7 +154,7 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 	// but we check to see if they have us on their list, if YES, we have a bidirectional connection
 	for (i = 0; i < num_nbours; ++i) {
 		int result;
-		/*printf("COMPARE_IP( %s  , %s ) = %d \n",IP2Dot(tmpbuf, in_pkt->frame.src_ip_addr), 
+		/*verbose(2, "COMPARE_IP( %s  , %s ) = %d \n",IP2Dot(tmpbuf, in_pkt->frame.src_ip_addr), 
 		 IP2Dot(tmpbuf, hellomsg->nbours_addr[i]),
 		 COMPARE_IP(in_pkt->frame.src_ip_addr,
 		 hellomsg->nbours_addr[i]));*/
@@ -163,27 +165,27 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 			int result = setBidirectionalFlag(gHtonl(tmpbuf, ospfhdr->ip_src),
 					TRUE);
 			if(result == 1) {
-				printf("[OSPFProcessHelloMessage]:: New bidirectional connection\n");
+				verbose(2, "[OSPFProcessHelloMessage]:: New bidirectional connection\n");
 
 				/* NOT completed. We should insert logic here if we start with an empty fwd table
-				printf("Updating Routing tables with new/existing neighbour\n");
+				verbose(2, "Updating Routing tables with new/existing neighbour\n");
 				uchar rnetwork[4];
 				uchar submask[4];
 				uchar next_hop[4];
 				int iface_id = in_pkt->frame.src_interface; //interface id
-				printf("InterfaceID = %d\n", iface_id);
+				verbose(2, "InterfaceID = %d\n", iface_id);
 				COPY_IP(rnetwork, gNtohl(tmpbuf+10,in_pkt->frame.src_ip_addr));
 				//set last byte to 0
 				rnetwork[3] = 0;
-				//printf("NEW rnetwork : %s \n", IP2Dot(tmpbuf+5, in_pkt->frame.src_ip_addr));
-				//printf("NEW rnetwork : %s \n", IP2Dot(tmpbuf+20, rnetwork));
-				printf("NEW rnetwork : %s \n", IP2Dot(tmpbuf+20,  gNtohl(tmpbuf+100,rnetwork)));
+				//verbose(2, "NEW rnetwork : %s \n", IP2Dot(tmpbuf+5, in_pkt->frame.src_ip_addr));
+				//verbose(2, "NEW rnetwork : %s \n", IP2Dot(tmpbuf+20, rnetwork));
+				verbose(2, "NEW rnetwork : %s \n", IP2Dot(tmpbuf+20,  gNtohl(tmpbuf+100,rnetwork)));
 				
 				COPY_IP(submask, gNtohl(tmpbuf+30, hellomsg->netmask));
-				printf("NEW submask : %s \n", IP2Dot(tmpbuf+50, gNtohl(tmpbuf,hellomsg->netmask)));
+				verbose(2, "NEW submask : %s \n", IP2Dot(tmpbuf+50, gNtohl(tmpbuf,hellomsg->netmask)));
 				
 				COPY_IP(next_hop, gNtohl(tmpbuf+60,in_pkt->frame.nxth_ip_addr));
-				printf("NEW next_hop : %s \n", IP2Dot(tmpbuf+70, gNtohl(tmpbuf,in_pkt->frame.nxth_ip_addr)));
+				verbose(2, "NEW next_hop : %s \n", IP2Dot(tmpbuf+70, gNtohl(tmpbuf,in_pkt->frame.nxth_ip_addr)));
 
 				addRouteEntry(route_tbl, gNtohl(tmpbuf,rnetwork), gNtohl(tmpbuf+10,next_hop), iface_id);
 				*/
@@ -210,10 +212,10 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 				newLink->linkType = TYPE_ANY_TO_ANY;
 				found->list = addLink(found->list, newLink);
 
-				printf("[OSPFProcessHelloMessage]:: Added new neighbor to my graph:\n");
-				printf("Interface: %s\n", IP2Dot(tmpbuf, found->ip));
-				printf("Neighbor link ID: %s\n", IP2Dot(tmpbuf, newLink->linkId));
-				printf("Neighbor link Data: %s\n", IP2Dot(tmpbuf, newLink->linkData));
+				verbose(2, "[OSPFProcessHelloMessage]:: Added new neighbor to my graph:\n");
+				verbose(2, "Interface: %s\n", IP2Dot(tmpbuf, found->ip));
+				verbose(2, "Neighbor link ID: %s\n", IP2Dot(tmpbuf, newLink->linkId));
+				verbose(2, "Neighbor link Data: %s\n", IP2Dot(tmpbuf, newLink->linkData));
 
 				//bcast this change
 				OSPFSendLSA();
@@ -243,7 +245,7 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 	int seqNo = lsahdr->seq_num;
 	uchar *src_ip = gNtohl(src_ip_buf, lsahdr->ads_router);
 
-	printf("[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
+	verbose(2, "[OSPFProcessLSA]:: processing incoming LSA packet from %s with sequence no. %d\n",
 			IP2Dot(tmpbuf, src_ip), seqNo);
 
 	// Drop packets that are from me
@@ -253,29 +255,30 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 		Node *found = getNodeByIP(graph, src_ip);
 		if (found == NULL || found->seq_Numb < seqNo) {
 			// We haven't seen this LSA yet
-			printf("[OSPFProcessLSA]:: Haven't seen this LSA before\n");
+			verbose(2, "[OSPFProcessLSA]:: Haven't seen this LSA before\n");
 			if (found == NULL) {
-				printf("[OSPFProcessLSA]:: Haven't received from this sender yet\n");
+				verbose(2, "[OSPFProcessLSA]:: Haven't received from this sender yet\n");
 				found = malloc(sizeof(Node));
 				COPY_IP(found->ip, src_ip);
 				found->seq_Numb = seqNo;
 				found->list = NULL;
-				parseLinks(lsa, found);
-
 				graph = addNode(graph, found);
-				printGraph(graph);
+				//printGraph(graph);
 			}
 			else {
 				// We've received from this sender, but this is a new LSA.
-				printf("[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
+				verbose(2, "[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
 				found->seq_Numb = seqNo;
+
 				parseLinks(lsa, found);
 				//printGraph(graph);
 			}
 
 
+			parseLinks(lsa, found);
+
 			// Broadcast the packet
-			printf("Broadcasting this packet\n");
+			verbose(2, "Broadcasting this packet\n");
 
 			IPOutgoingBcastAllInterPkt(in_pkt, ip_pkt->ip_pkt_len, 0, OSPF_PROTOCOL);
 
@@ -283,11 +286,11 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 			updateRoutingTable();
 		}
 		else {
-			printf("Received duplicate packet, not broadcasting!\n");
+			verbose(2, "Received duplicate packet, not broadcasting!\n");
 		}
 	}
 	else {
-		printf("I am the sender, ignoring this packet\n");
+		verbose(2, "I am the sender, ignoring this packet\n");
 	}
 }
 
@@ -308,7 +311,7 @@ void parseLinks(ospf_ls_update_t *update, Node *node) {
 	// Add the new links
 	int i;
 	for (i = 0; i < update->num_links; i++) {
-		printf("[parseLinks]:: ADDING A LINK!\n");
+		verbose(2, "[parseLinks]:: ADDING A LINK!\n");
 		ospf_link_t *curLink = &(update->links[i]);
 		Link *newLink = malloc(sizeof(Link));
 		COPY_IP(newLink->linkId, gNtohl(tmpbuf, curLink->link_id));
@@ -417,7 +420,7 @@ void OSPFSendHelloThread() {
 		usleep(10000000); //10seconds
 		//gettimeofday(&second, NULL);
 		//elapsed_time = subTimeVal(&second, &first);
-		//printf("SLEEPED FOR %6.3f ms \n", elapsed_time);
+		//verbose(2, "SLEEPED FOR %6.3f ms \n", elapsed_time);
 	}
 }
 
@@ -439,7 +442,7 @@ void OSPFNeighbourLivenessChecker() {
 				if (elapsed_time > 40000) {
 					// Remove from graph
 					Node *interface = getNodeByIP(graph, nbours_tbl[i].iface_ip_addr);
-					printf("Trying to remove %s from graph\n", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
+					verbose(2, "Trying to remove %s from graph\n", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
 					interface->list = removeLinkByLinkData(interface->list, nbours_tbl[i].nbour_ip_addr);
 
 					// Remove node if no links lefts
@@ -458,7 +461,7 @@ void OSPFNeighbourLivenessChecker() {
 					updateRoutingTable();
 					//delete routing entry where subnet = neibour_ip ending in 0 (DONT NEED)
 
-					printf("[OSPFNeighbourLivenessChecker]:: LSA bcast bc a neighbour was removed\n");
+					verbose(2, "[OSPFNeighbourLivenessChecker]:: LSA bcast bc a neighbour was removed\n");
 					//bcast this change
 					OSPFSendLSA();
 				}
@@ -505,7 +508,7 @@ void OSPFSendHello() {
 
 	if (num_of_neighbours > 0) {
 		for (i = 0; i < num_of_neighbours; i++) {
-			//printf("[OSPFSendHello]:: adding neighbour : %s \n", IP2Dot(tmpbuf, list_nbours[i]));
+			//verbose(2, "[OSPFSendHello]:: adding neighbour : %s \n", IP2Dot(tmpbuf, list_nbours[i]));
 			COPY_IP(hellomsg->nbours_addr[i], list_nbours[i]);
 		}
 	}
@@ -734,24 +737,24 @@ int getEmptyIndex() {
 void printNeighboursTable() {
 	int i;
 	char tmpbuf[MAX_TMPBUF_LEN];
-	printf("------------------------------------------------------------------\n");
-	printf(" O S P F :  N E I G H B O U R S  T A B L E  \n");
-	printf("------------------------------------------------------------------\n");
-	printf("index\tIface\t\tIfaceID\tNeighbour\tisStub\tisBidirectional \n");
+	printf( "------------------------------------------------------------------\n");
+	printf( " O S P F :  N E I G H B O U R S  T A B L E  \n");
+	printf( "------------------------------------------------------------------\n");
+	printf( "index\tIface\t\tIfaceID\tNeighbour\tisStub\tisBidirectional \n");
 	for (i = 0; i < MAX_INTERFACES; i++) {
 		if (nbours_tbl[i].is_empty == FALSE) {
-			printf("%d\t", i);
-			printf("%s\t", IP2Dot(tmpbuf, nbours_tbl[i].iface_ip_addr));
-			printf("%d\t", nbours_tbl[i].interface_id);
+			printf( "%d\t", i);
+			printf( "%s\t", IP2Dot(tmpbuf, nbours_tbl[i].iface_ip_addr));
+			printf( "%d\t", nbours_tbl[i].interface_id);
 			if (strlen(tmpbuf) <= 8)
-				printf("\t"); //just to pretty print
-			printf("%s\t", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
-			printf("%d\t", nbours_tbl[i].is_stub);
-			printf("%d\n", nbours_tbl[i].bidirectional);
+				printf( "\t"); //just to pretty print
+			printf( "%s\t", IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
+			printf( "%d\t", nbours_tbl[i].is_stub);
+			printf( "%d\n", nbours_tbl[i].bidirectional);
 			
 		}
 	}
-	printf("-----------------------------------------------------------------\n");
+	verbose(2, "-----------------------------------------------------------------\n");
 	return;
 }
 

@@ -429,7 +429,7 @@ int IPBcastOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, 
 		//if broadcast packet we set the address for 255.255.255.255
 		if(pkt->frame.bcast == TRUE) 
 		{
-			printf("[DEBUG] Retransmission of LSA pkt, broadcasting\n");
+			verbose(2, "[DEBUG] Retransmission of LSA pkt, broadcasting\n");
 			//set ip to find route eg. 192.168.2.255
 			COPY_IP(ip_pkt->ip_dst, gHtonl(tmpbuf, dst_ip));
 
@@ -648,7 +648,7 @@ int IPOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int s
 		if (ospfhdr->type == OSPF_LINK_STATUS_UPDATE && 
 			(COMPARE_IP(ospfhdr->ip_src, gHtonl(tmpbuf, iface_ip_addr))) == 0) {
 			printGPacket(pkt, 3, "IP_ROUTINE");
-			printf("[DEBUG] Retransmission of LSA pkt, not broadcasting\n");
+			verbose(2,"[DEBUG] Retransmission of LSA pkt, not broadcasting\n");
 			//return EXIT_SUCCESS;
 		}
 	}

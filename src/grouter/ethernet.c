@@ -135,6 +135,10 @@ void* fromEthernetDev(void *arg)
 				// Add to graph
 				addStubToGraph(findNeighbourIndex(link_ip));
 
+				updateRoutingTable();
+				//printf("BCASTING my new stub neighbour\n");
+				//bcast this change
+				OSPFSendLSA();
 			}
 
 			setStubToTrueFlag(link_ip);
