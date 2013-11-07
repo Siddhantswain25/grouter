@@ -55,6 +55,9 @@ void updateRoutingTable() {
 
 	NextHop *cur = nh;
 	uchar zero_ip[] = OSPF_ZERO_ADDR;
+
+	RouteTableInit(route_tbl);
+
 	while (cur != NULL) {
 		printf("Adding Route for: \n");
 		printf("Network Address\tSubnet Mask\tNext Hop\n");
@@ -155,7 +158,7 @@ void OSPFProcessHelloMessage(gpacket_t *in_pkt) {
 			if(result == 1) {
 				printf("[OSPFProcessHelloMessage]:: New bidirectional connection\n");
 
-				/*
+				/* NOT completed. We should insert logic here if we start with an empty fwd table
 				printf("Updating Routing tables with new/existing neighbour\n");
 				uchar rnetwork[4];
 				uchar submask[4];
@@ -441,6 +444,12 @@ void OSPFNeighbourLivenessChecker() {
 					deleteNeighbourEntry(nbours_tbl[i].nbour_ip_addr);
 					verbose(3, "[OSPFNeighbourLivenessChecker]:: Neighbour %s is dead. deleting...",
 							IP2Dot(tmpbuf, nbours_tbl[i].nbour_ip_addr));
+
+					//delete routing entries where neibour_ip is the nexthop
+					deleteRouteEntryByInterface(route_tbl, nbours_tbl[i].interface_id);
+
+					updateRoutingTable();
+					//delete routing entry where subnet = neibour_ip ending in 0 (DONT NEED)
 
 					printf("[OSPFNeighbourLivenessChecker]:: LSA bcast bc a neighbour was removed\n");
 					//bcast this change
