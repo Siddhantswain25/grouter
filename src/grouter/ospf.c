@@ -260,8 +260,6 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 				COPY_IP(found->ip, src_ip);
 				found->seq_Numb = seqNo;
 				found->list = NULL;
-				parseLinks(lsa, found);
-
 				graph = addNode(graph, found);
 				printGraph(graph);
 			}
@@ -269,10 +267,11 @@ void OSPFProcessLSA(gpacket_t *in_pkt) {
 				// We've received from this sender, but this is a new LSA.
 				printf("[OSPFProcessLSA]:: Have received from this sender before, updating seqNum\n");
 				found->seq_Numb = seqNo;
-				//parseLinks(lsa, found);
 				//printGraph(graph);
 			}
 
+
+			parseLinks(lsa, found);
 
 			// Broadcast the packet
 			printf("Broadcasting this packet\n");
