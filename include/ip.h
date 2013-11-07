@@ -74,9 +74,6 @@ int IPVerifyPacket(ip_packet_t *ip_pkt);
 int isInSameNetwork(uchar *ip_addr1, uchar *ip_addr2);
 int IPOutgoingBcastAllInterPkt(gpacket_t *pkt, int size, int newflag, int src_prot);
 int getInterfaces(uchar buf[][4]);
-<<<<<<< HEAD
 int IPBcastOutgoingPacket(gpacket_t *pkt, uchar *dst_ip, int size, int newflag, int src_prot, int iface_id, uchar iface_ip_addr[]);
-=======
 int hasInterface(uchar *ip);
->>>>>>> 8b45d46dc6b0b3d129ce46ffa6a97f5a56d746c0
 #endif
