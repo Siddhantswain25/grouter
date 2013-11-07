@@ -395,6 +395,7 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 		if(distance[i] == 1){
 			//We are right next to the network
 			Dot2IP("0.0.0.0", next->nh_ip);
+			COPY_IP(next->neighbourIpHack, node[i].ip) ;
 		}else{
 			COPY_IP(next->nh_ip, node[id].ip);
 			/*j = findCorrectInterface(node[id].ip, interfaces, numbInterface);
@@ -445,6 +446,8 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 				continue;
 			}
 			COPY_IP(next->interfaceIp, interfaces[j]);
+
+			COPY_IP(next->neighbourIpHack, stubHops->rnetwork) ;
 
 			//COPY_IP(next->interfaceIp, node[stubHops->assNode].ip);
 

@@ -43,6 +43,8 @@ typedef struct _NextHop{
 
 	uchar interfaceIp[4];	//interface ip
 
+	uchar neighbourIpHack[4];
+
 	int distance;
 
 	NextHop *next;
