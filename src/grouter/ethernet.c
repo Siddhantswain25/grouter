@@ -129,7 +129,12 @@ void* fromEthernetDev(void *arg)
 
 			if(index == -1)
 			{
+				// Add to neighbour table
 				addNeighbourEntry(iface->ip_addr, link_ip, iface->interface_id);
+
+				// Add to graph
+				addStubToGraph(findNeighbourIndex(link_ip));
+
 			}
 
 			setStubToTrueFlag(link_ip);

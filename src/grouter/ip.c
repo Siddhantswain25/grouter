@@ -753,3 +753,14 @@ int getInterfaces(uchar buf[][4]) {
 	return findAllInterfaceIPs(MTU_tbl, buf);
 }
 
+/* Returns 1 if one of the interfaces has the given IP */
+int hasInterface(uchar *ip) {
+	uchar interfaces[MAX_INTERFACES][4];
+	int numInterfaces = getInterfaces(interfaces);
+	int i;
+	for (i = 0; i < numInterfaces; i++) {
+		if (!COMPARE_IP(interfaces[i], ip)) return 1;
+	}
+	return 0;
+}
+
