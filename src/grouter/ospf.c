@@ -55,9 +55,7 @@ void updateRoutingTable() {
 
 	NextHop *cur = nh;
 	uchar zero_ip[] = OSPF_ZERO_ADDR;
-
 	RouteTableInit(route_tbl);
-
 	while (cur != NULL) {
 		printf("Adding Route for: \n");
 		printf("Network Address\tSubnet Mask\tNext Hop\n");
@@ -65,28 +63,37 @@ void updateRoutingTable() {
 		printf("%s\t", IP2Dot(tmpbuf, cur->rsubmask));
 		printf("%s\t\n", IP2Dot(tmpbuf, cur->nh_ip));
 		//check if next hop is diff than 0.0.0.0
-		if ((COMPARE_IP(cur->nh_ip, zero_ip)) != 0) 
+		int index = -1;
+		if ((COMPARE_IP(cur->nh_ip, zero_ip)) == 0) 
 		{
+			printf("IP is 0.0.0.0\n");
+			//find neighbour using next_hop ip
+			
+			printf("HACK IP : %s\t", IP2Dot(tmpbuf,cur->rsubmask));
+			index = findNeighbourIndex(cur->rsubmask);
+		} else {
 			printf("IP is NOT 0.0.0.0\n");
 			//find neighbour using next_hop ip
-			int index = findNeighbourIndex(cur->nh_ip);
-			if (index >= 0) {
-				printf("found Neighbour at [%d]\n", index );
-				//get interface Id
-				int iface_id = nbours_tbl[index].interface_id;
-				
-				if(iface_id > 0) {
-					printf("found Interface : %d\n", iface_id);
-					//add route to fwd table
-					addRouteEntry(route_tbl, cur->rnetwork, cur->rsubmask, cur->nh_ip, iface_id);
-				} else {
-					printf("Couldn't found a valid Interface. Are you sure this neighbour is valid and alive?\n", iface_id);
-				}
-				
-			} else {
-				printf("Couldn't find this next hop neighour\n");
-			}
+			index = findNeighbourIndex(cur->nh_ip);
 		}
+		if (index >= 0) {
+			printf("found Neighbour at [%d]\n", index );
+			//get interface Id
+			int iface_id = nbours_tbl[index].interface_id;
+			
+			if(iface_id > 0) {
+				printf("found Interface : %d\n", iface_id);
+				//add route to fwd table
+				Dot2IP("255.255.255.0", cur->rsubmask);
+				addRouteEntry(route_tbl, cur->rnetwork, cur->rsubmask, cur->nh_ip, iface_id);
+			} else {
+				printf("Couldn't found a valid Interface. Are you sure this neighbour is valid and alive?\n", iface_id);
+			}
+			
+		} else {
+			printf("Couldn't find this next hop neighour\n");
+		}
+		
 		//TODO: if next hop 0.0.0.0 do we need to update the route table?
 		cur = cur->next;
 	}
