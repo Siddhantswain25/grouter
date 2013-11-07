@@ -325,7 +325,7 @@ NextHop* calculateDijkstra(Node *head, uchar interfaces[][4], int numbInterface)
 				StubHop *hop = (StubHop *)malloc(sizeof(StubHop));
 				
 				COPY_IP(hop->rnetwork, neighbour->linkId);
-				COPY_IP(hop->rsubmask, neighbour->linkData);
+				Dot2IP("255.255.255.0", hop->rsubmask);
 				hop->assNode = currentNodeId;//reference node that will have the same nextHop
 
 				hop->next = stubHops;
