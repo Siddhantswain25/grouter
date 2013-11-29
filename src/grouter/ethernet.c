@@ -23,9 +23,9 @@
 extern pktcore_t *pcore;
 extern classlist_t *classifier;
 extern filtertab_t *filter;
-
-
 extern router_config rconfig;
+
+int start,counter_in,counter_out = 0;
 
 int findPacketSize(pkt_data_t *pkt)
 {
@@ -53,6 +53,9 @@ void *toEthernetDev(void *arg)
 	int pkt_size;
 
 	verbose(2, "[toEthernetDev]:: entering the function.. ");
+	if(start == 1){
+		counter_out = counter_out+sizeof(gpacket_t);
+	}
 	// find the outgoing interface and device...
 	if ((iface = findInterface(inpkt->frame.dst_interface)) != NULL)
 	{
@@ -104,6 +107,7 @@ void* fromEthernetDev(void *arg)
 
 
 		//FOR OSPF
+		/*
 		char tmpbuf[MAX_TMPBUF_LEN];
 		uchar valMac1[6];
 		uchar valMac2[6];
@@ -145,6 +149,7 @@ void* fromEthernetDev(void *arg)
 			
 			
 		}
+		*/
 		
 		// check whether the incoming packet is a layer 2 broadcast or
 		// meant for this node... otherwise should be thrown..
@@ -161,6 +166,11 @@ void* fromEthernetDev(void *arg)
 		in_pkt->frame.src_interface = iface->interface_id;
 		COPY_MAC(in_pkt->frame.src_hw_addr, iface->mac_addr);
 		COPY_IP(in_pkt->frame.src_ip_addr, iface->ip_addr);
+
+		//calculate Input rate
+		if(start == 1){
+			counter_in = counter_in+sizeof(gpacket_t);
+		}
 
 		// check for filtering.. if the it should be filtered.. then drop
 		if (filteredPacket(filter, in_pkt))

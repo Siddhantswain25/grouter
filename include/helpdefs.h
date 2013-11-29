@@ -21,6 +21,7 @@
 #define USAGE_CLASS		    "class cname [-src ip_spec [<min_port--max_port>]] [-dst ip_spec [<min_port--max_port>]] [-prot num] [-tos tos_spec]"
 #define USAGE_FILTER     	"filter action [action specific options]"
 #define USAGE_OSPF          "ospf -[type]"
+#define USAGE_QOS           "qos -[options]"
 
 
 #define SHELP_HELP          "display help information on given command"
@@ -41,6 +42,7 @@
 #define SHELP_CLASS		    "create add, del, and view classifier information"
 #define SHELP_FILTER		"create add, del, and view filtering rules; this uses class rules to group packets"
 #define SHELP_OSPF          "broacast an IP packet with a OSPF header"
+#define SHELP_QOS           "quality of service interface"
 
 
 /*
@@ -79,4 +81,5 @@ absolute path (e.g., /sbin/ifconfig). \n"
 #define LHELP_CLASS			"class.hlp"
 #define LHELP_FILTER		"filter.hlp"
 #define LHELP_OSPF          "ospf.hlp"
+#define LHELP_QOS          "qos.hlp"
 #endif

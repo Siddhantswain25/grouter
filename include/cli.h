@@ -73,6 +73,7 @@ void spolicyCmd();
 void classCmd();
 void filterCmd();
 void ospfCmd();
+void qosCmd();
 
 
 #endif

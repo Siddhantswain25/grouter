@@ -48,6 +48,10 @@ extern classlist_t *classifier;
 extern filtertab_t *filter;
 extern pktcore_t *pcore;
 
+extern start;
+extern counter_in;
+extern counter_out;
+
 /*
  * This is the main routine of the CLI. Everything starts here.
  * The CLI registers and commands into a hash table and forks a thread to
@@ -93,6 +97,7 @@ int CLIInit(router_config *rarg)
 	registerCLI("class", classCmd, SHELP_CLASS, USAGE_CLASS, LHELP_CLASS);
 	registerCLI("filter", filterCmd, SHELP_FILTER, USAGE_FILTER, LHELP_FILTER);
 	registerCLI("ospf", ospfCmd, SHELP_OSPF, USAGE_OSPF, LHELP_OSPF);
+	registerCLI("qos", qosCmd, SHELP_QOS, USAGE_QOS, LHELP_QOS);
 
 
 	if (rarg->config_dir != NULL)
@@ -858,11 +863,36 @@ void pingCmd()
 	ICMPDoPing(ip_addr, pkt_size, tries);
 }
 
+
+void qosCmd()
+{
+	verbose(2, "[qosCmd]:: Quality of service operation");
+	
+	char *next_tok = strtok(NULL, " \n");
+	int type;
+
+	if (next_tok == NULL) //forces parameters.
+		return;
+
+	if (!strcmp(next_tok, "-throughput") || !strcmp(next_tok, "-t"))
+	{
+		
+		start = 1; //flag to initiate counting
+		usleep(5000000); //sleep for 5 seconds and count
+		printf("Counter_in : %d bytes\n", counter_in);
+		printf("Counter_out : %d bytes\n", counter_out);
+		printf("Input Rate : %d bytes/sec\n", counter_in/5);
+		printf("Output Throughput : %d bytes/sec\n", counter_out/5);
+		start = 0; //stop counting
+		counter_out = 0;
+		counter_in = 0;
+	}
+}
+
 /*
  * send a ospf packet...
  * ospf [-type] IP_addr <-dont need ip since is a broadcast
  */
-
 void ospfCmd()
 {
 	verbose(2, "[ospfCmd]:: Hello World 1");
