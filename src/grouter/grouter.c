@@ -18,7 +18,7 @@
 #include <pthread.h>
 #include "ospf.h"
 
-router_config rconfig = {.router_name=NULL, .gini_home=NULL, .cli_flag=0, .config_file=NULL, .config_dir=NULL, .ghandler=0, .clihandler= 0, .scheduler=0, .worker=0, .schedcycle=10000};
+router_config rconfig = {.router_name=NULL, .gini_home=NULL, .cli_flag=0, .config_file=NULL, .config_dir=NULL, .ghandler=0, .clihandler= 0, .scheduler=0, .worker=0, .schedcycle=1};
 pktcore_t *pcore;
 classlist_t *classifier;
 filtertab_t *filter;
@@ -120,6 +120,10 @@ int main(int ac, char *av[])
 
 	// start the CLI..
 	CLIInit(&(rconfig));
+
+	//pthread_t t1;
+	//t1 = PktCoreSchedulerInit(pcore);
+	//wait4thread(t1);
 
 
 	wait4thread(rconfig.scheduler);
