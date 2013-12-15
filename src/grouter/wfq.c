@@ -33,6 +33,9 @@ void *weightedFairScheduler(void *pc)
 	{
 		verbose(2, "[weightedFairScheduler]:: Worst-case weighted fair queuing scheduler processing..");
 
+		savekey = NULL;
+		minftime = INFINITY;
+
 		pthread_mutex_lock(&(pcore->qlock));
 		if (pcore->packetcnt == 0)
 			pthread_cond_wait(&(pcore->schwaiting), &(pcore->qlock));
@@ -45,8 +48,10 @@ void *weightedFairScheduler(void *pc)
 		{
 			nxtkey = list_next(keylst);
 			nxtq = map_get(pcore->queues, nxtkey);
-			if (nxtq->cursize == 0)
+			if (nxtq->cursize == 0) {
+				//printf("The queue %s is empty\n", nxtkey);
 				continue;
+			}
 			if ((nxtq->stime <= pcore->vclock) && (nxtq->ftime < minftime))
 			{
 				savekey = nxtkey;
@@ -60,6 +65,7 @@ void *weightedFairScheduler(void *pc)
 			continue;
 		else
 		{
+			printf("Reading from %s, ftime is %f\n", savekey, minftime);
 			thisq = map_get(pcore->queues, savekey);
 			readQueue(thisq, (void **)&in_pkt, &pktsize);
 			writeQueue(pcore->workQ, in_pkt, pktsize);
@@ -88,6 +94,8 @@ void *weightedFairScheduler(void *pc)
 			}
 			list_release(keylst);
 			pcore->vclock = max(minstime, (pcore->vclock + ((double)pktsize)/tweight));
+			// or should we just update the vclock by adding the length of the packet we just sent?
+			printf("vclock is now %f\n", pcore->vclock);
 		}
 	}
 }
@@ -117,12 +125,14 @@ int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *q
 		return EXIT_FAILURE;             // packet dropped..
 	}
 
-	printf("Checking the queue size \n");
+	verbose(2, "[weightedFairQueuer]:: Checking the queue size \n");
 	if (thisq->cursize == 0)
 	{
+		// If it's the first element we need to set the stime and ftime of this queue.
 		verbose(2, "[weightedFairQueuer]:: inserting the first element.. ");
 		thisq->stime = max(pcore->vclock, thisq->ftime);
-		thisq->ftime = thisq->stime + pktsize/thisq->weight;
+		//thisq->ftime = thisq->stime + pktsize/thisq->weight;
+		thisq->ftime = max(pcore->vclock, thisq->ftime) + pktsize/thisq->weight;
 
 		minstime = thisq->stime;
 
@@ -141,6 +151,7 @@ int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *q
 
 		pcore->vclock = max(minstime, pcore->vclock);
 		// insert the packet... and increment variables..
+		printf("Writing to queue\n");
 		writeQueue(thisq, in_pkt, pktsize);
 		pcore->packetcnt++;
 
@@ -152,6 +163,7 @@ int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *q
 	} else if (thisq->cursize < thisq->maxsize)
 	{
 		// insert packet and setup variables..
+		printf("Writing to queue\n");
 		writeQueue(thisq, in_pkt, pktsize);
 		pcore->packetcnt++;
 		pthread_mutex_unlock(&(pcore->qlock));
