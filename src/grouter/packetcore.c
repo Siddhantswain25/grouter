@@ -309,7 +309,7 @@ pthread_t PktCoreSchedulerInit(pktcore_t *pcore)
 	int threadstat;
 	pthread_t threadid;
 
-	threadstat = pthread_create((pthread_t *)&threadid, NULL, (void *)roundRobinScheduler, (void *)pcore);
+	threadstat = pthread_create((pthread_t *)&threadid, NULL, (void *)weightedFairScheduler, (void *)pcore);
 	if (threadstat != 0)
 	{
 		verbose(1, "[PKTCoreSchedulerInit]:: unable to create thread.. ");
@@ -423,7 +423,7 @@ void enqueuePacket(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize)
 	 */
 	qkey = tagPacket(pcore, in_pkt);
 
-	verbose(2, "[enqueuePacket]:: simple packet queuer ..");
+	/*verbose(2, "[enqueuePacket]:: simple packet queuer ..");
 	if (prog_verbosity_level() >= 3)
 		printGPacket(in_pkt, 6, "QUEUER");
 
@@ -462,7 +462,7 @@ void enqueuePacket(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize)
 	pthread_mutex_unlock(&(pcore->qlock));
 	verbose(2, "[enqueuePacket]:: Adding packet.. ");
 	writeQueue(thisq, in_pkt, pktsize);
-	return EXIT_SUCCESS;
+	return EXIT_SUCCESS;*/
 }
 
 
@@ -509,5 +509,3 @@ int redDiscard(simplequeue_t *thisq, gpacket_t *ipkt)
 
 	return discarded;
 }
-
-
