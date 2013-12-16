@@ -67,20 +67,26 @@ void *weightedFairScheduler(void *pc)
 			continue;
 		else
 		{
-			printf("Reading from %s, ftime is %f\n", savekey, minftime);
 			thisq = map_get(pcore->queues, savekey);
-			readQueue(thisq, (void **)&in_pkt, &pktsize);
-			writeQueue(pcore->workQ, in_pkt, pktsize);
-			pthread_mutex_lock(&(pcore->qlock));
-			pcore->packetcnt--;
-			pthread_mutex_unlock(&(pcore->qlock));
-
-			peekQueue(thisq, (void **)&nxt_pkt, &npktsize);
-			if (npktsize)
-			{
-				thisq->stime = minftime;
-				thisq->ftime = thisq->stime + npktsize/thisq->weight;
+			int rstatus = readQueue(thisq, (void **)&in_pkt, &pktsize);
+			if (rstatus == EXIT_SUCCESS) {
+				pthread_mutex_lock(&(pcore->qlock));
+				pcore->packetcnt--;
+				pthread_mutex_unlock(&(pcore->qlock));
+				//printf("%s wins!\n", savekey);
+				writeQueue(pcore->workQ, in_pkt, pktsize);
+				peekQueue(thisq, (void **)&nxt_pkt, &npktsize);
+				if (npktsize)
+				{
+					thisq->stime = minftime;
+					thisq->ftime = thisq->stime + npktsize/thisq->weight;
+				}
+				pcore->vclock = minftime;
 			}
+			else {
+				printf ("*** COULD NOT READ FROM QUEUE %s\n ***", savekey);
+			}
+
 
 //			minstime = thisq->stime;
 //			tweight = 0.0;
@@ -97,9 +103,9 @@ void *weightedFairScheduler(void *pc)
 //			list_release(keylst);
 //			pcore->vclock = max(minstime, (pcore->vclock + ((double)pktsize)/tweight));
 			// or should we just update the vclock by adding the length of the packet we just sent?
-			pcore->vclock = minftime;
-			printf("vclock is now %f\n", pcore->vclock);
 		}
+
+		usleep(rconfig.schedcycle);
 	}
 }
 
@@ -109,34 +115,35 @@ void *weightedFairScheduler(void *pc)
 // WCWeightFairQueuer: function called by the classifier to enqueue
 // the packets.. 
 // TODO: Debug this function...
-int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *qkey)
-{
-	simplequeue_t *thisq, *nxtq;
-	double minftime, minstime, tweight;
-	List *keylst;
-	char *nxtkey, *savekey;
-
-	verbose(2, "[weightedFairQueuer]:: Worst-case weighted fair queuing scheduler processing..");
-
-	pthread_mutex_lock(&(pcore->qlock));
-
-	thisq = map_get(pcore->queues, qkey);
-	if (thisq == NULL)
-	{
-		fatal("[weightedFairQueuer]:: Invalid %s key presented for queue addition", qkey);
-		pthread_mutex_unlock(&(pcore->qlock));
-		return EXIT_FAILURE;             // packet dropped..
-	}
-
-	verbose(2, "[weightedFairQueuer]:: Checking the queue size \n");
-	if (thisq->cursize == 0)
-	{
-		// If it's the first element we need to set the stime and ftime of this queue.
-		verbose(2, "[weightedFairQueuer]:: inserting the first element.. ");
-		thisq->stime = pcore->vclock;
-		//thisq->ftime = thisq->stime + pktsize/thisq->weight;
-		thisq->ftime = thisq->stime + pktsize/thisq->weight;
-
+//int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *qkey)
+//{
+//	simplequeue_t *thisq, *nxtq;
+//	double minftime, minstime, tweight;
+//	List *keylst;
+//	char *nxtkey, *savekey;
+//
+//	verbose(2, "[weightedFairQueuer]:: Worst-case weighted fair queuing scheduler processing..");
+//
+//	pthread_mutex_lock(&(pcore->qlock));
+//
+//	thisq = map_get(pcore->queues, qkey);
+//	if (thisq == NULL)
+//	{
+//		fatal("[weightedFairQueuer]:: Invalid %s key presented for queue addition", qkey);
+//		pthread_mutex_unlock(&(pcore->qlock));
+//		return EXIT_FAILURE;             // packet dropped..
+//	}
+//
+//	verbose(2, "[weightedFairQueuer]:: Checking the queue size \n");
+//	if (thisq->cursize == 0)
+//	{
+//		printf("Inserting first element in %s\n", thisq->name);
+//		// If it's the first element we need to set the stime and ftime of this queue.
+//		verbose(2, "[weightedFairQueuer]:: inserting the first element.. ");
+//		thisq->stime = pcore->vclock;
+//		//thisq->ftime = thisq->stime + pktsize/thisq->weight;
+//		thisq->ftime = thisq->stime + pktsize/thisq->weight;
+//
 //		minstime = thisq->stime;
 //
 //		keylst = map_keys(pcore->queues);
@@ -153,28 +160,29 @@ int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *q
 //		list_release(keylst);
 //
 //		pcore->vclock = max(minstime, pcore->vclock);
-		
-		// insert the packet... and increment variables..
-		printf("Writing to queue\n");
-		writeQueue(thisq, in_pkt, pktsize);
-		pcore->packetcnt++;
-
-		// wake up scheduler if it was waiting..
-		if (pcore->packetcnt == 1)
-			pthread_cond_signal(&(pcore->schwaiting));
-		pthread_mutex_unlock(&(pcore->qlock));
-		return EXIT_SUCCESS;
-	} else if (thisq->cursize < thisq->maxsize)
-	{
-		printf("Writing to queue\n");
-		writeQueue(thisq, in_pkt, pktsize);
-		pcore->packetcnt++;
-		pthread_mutex_unlock(&(pcore->qlock));
-		return EXIT_SUCCESS;
-	} else {
-		// Should already be handled by packetcore
-		verbose(2, "[weightedFairQueuer]:: Packet dropped.. Queue for %s is full ", qkey);
-		pthread_mutex_unlock(&(pcore->qlock));
-		return EXIT_SUCCESS;
-	}
-}
+//
+//		// insert the packet... and increment variables..
+//		writeQueue(thisq, in_pkt, pktsize);
+//		pcore->packetcnt++;
+//
+//		// wake up scheduler if it was waiting..
+//		if (pcore->packetcnt == 1)
+//			pthread_cond_signal(&(pcore->schwaiting));
+//		pthread_mutex_unlock(&(pcore->qlock));
+//		return EXIT_SUCCESS;
+//	} else if (thisq->cursize < thisq->maxsize)
+//	{
+//		printf("Writing to %s, not first element\n", thisq->name);
+//		writeQueue(thisq, in_pkt, pktsize);
+//		printf("%s size is %d\n", thisq->name, thisq->cursize);
+//		pcore->packetcnt++;
+//		pthread_mutex_unlock(&(pcore->qlock));
+//		return EXIT_SUCCESS;
+//	} else {
+//		printf("Dropping packet because %s is full\n", thisq->name);
+//		// Should already be handled by packetcore
+//		verbose(2, "[weightedFairQueuer]:: Packet dropped.. Queue for %s is full ", qkey);
+//		pthread_mutex_unlock(&(pcore->qlock));
+//		return EXIT_SUCCESS;
+//	}
+//}

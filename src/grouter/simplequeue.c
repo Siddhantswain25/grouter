@@ -90,7 +90,7 @@ void printSimpleQueue(simplequeue_t *msgqueue)
 	printf("The queue has %d bytes in it \n", msgqueue->bytesleft);
 
 	printf("Previous access time: %f\n", msgqueue->prevaccesstime);
-	printf("Average byte rate: %f\n", msgqueue->avgbyterate);
+	printf("Average byte rate: %f\n\n", msgqueue->avgbyterate);
 }
 
 

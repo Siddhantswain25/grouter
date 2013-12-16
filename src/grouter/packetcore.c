@@ -309,6 +309,7 @@ pthread_t PktCoreSchedulerInit(pktcore_t *pcore)
 	int threadstat;
 	pthread_t threadid;
 
+	//threadstat = pthread_create((pthread_t *)&threadid, NULL, (void *)weightedFairScheduler, (void *)pcore);
 	threadstat = pthread_create((pthread_t *)&threadid, NULL, (void *)weightedFairScheduler, (void *)pcore);
 	if (threadstat != 0)
 	{
@@ -456,13 +457,18 @@ int enqueuePacket(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize)
 		return EXIT_FAILURE;
 	}
 
-//	pcore->packetcnt++;
-//	if (pcore->packetcnt == 1)
-//		pthread_cond_signal(&(pcore->schwaiting)); // wake up scheduler if it was waiting..
+	// comment these three lines for WFQ
+	pcore->packetcnt++;
+	if (pcore->packetcnt == 1)
+		pthread_cond_signal(&(pcore->schwaiting)); // wake up scheduler if it was waiting..
 	pthread_mutex_unlock(&(pcore->qlock));
 	verbose(2, "[enqueuePacket]:: Adding packet.. ");
-	weightedFairQueuer(pcore, in_pkt, pktsize, qkey);
-	//writeQueue(thisq, in_pkt, pktsize);
+	//weightedFairQueuer(pcore, in_pkt, pktsize, qkey);
+	if (thisq->cursize == 0) {
+		thisq->stime = pcore->vclock;
+		thisq->ftime = thisq->stime + pktsize/thisq->weight;
+	}
+	writeQueue(thisq, in_pkt, pktsize);
 	return EXIT_SUCCESS;
 }
 
