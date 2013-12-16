@@ -668,57 +668,46 @@ void classCmd()
 	port_range_t *pps;
 
 	next_tok = strtok(NULL, " \n");
-	if (next_tok != NULL)
-	{
-		if (!strcmp(next_tok, "add"))
-		{
+	if (next_tok != NULL) {
+		if (!strcmp(next_tok, "add")) {
 			next_tok = strtok(NULL, " \n");
 			strcpy(cname, next_tok);
 			addClassDef(classifier, cname);
 
-			while ((next_tok = strtok(NULL, " \n")) != NULL)
-			{
-				if (!strcmp(next_tok, "-src")) sside = 1;
-				if (!strcmp(next_tok, "-dst")) sside = 0;
+			while ((next_tok = strtok(NULL, "( )\n")) != NULL) {
+				if (!strcmp(next_tok, "-src"))
+					sside = 1;
+				if (!strcmp(next_tok, "-dst"))
+					sside = 0;
 
-				while ((next_tok = strtok(NULL, "( )\n")) != NULL)
-				{
-					if (!strcmp(next_tok, "-net"))
-					{
-						next_tok = strtok(NULL, " )\n");
-						ips = parseIPSpec(next_tok);
-						insertIPSpec(classifier, cname, sside, ips);
-					}
-					if (!strcmp(next_tok, "-port"))
-					{
-						next_tok = strtok(NULL, " )\n");
-						pps = parsePortRangeSpec(next_tok);
-						insertPortRangeSpec(classifier, cname, sside, pps);
-					}
-					if (!strcmp(next_tok, "-prot"))
-					{
-						next_tok = strtok(NULL, " )\n");
-						insertProtSpec(classifier, cname, gAtoi(next_tok));
-					}
-					if (!strcmp(next_tok, "-tos"))
-					{
-						next_tok = strtok(NULL, " )\n");
-						insertTOSSpec(classifier, cname, gAtoi(next_tok));
-					}
+				if (!strcmp(next_tok, "-net")) {
+					next_tok = strtok(NULL, " )\n");
+					ips = parseIPSpec(next_tok);
+					insertIPSpec(classifier, cname, sside, ips);
+				}
+				if (!strcmp(next_tok, "-port")) {
+					next_tok = strtok(NULL, " )\n");
+					pps = parsePortRangeSpec(next_tok);
+					insertPortRangeSpec(classifier, cname, sside, pps);
+				}
+				if (!strcmp(next_tok, "-prot")) {
+					next_tok = strtok(NULL, " )\n");
+					insertProtSpec(classifier, cname, gAtoi(next_tok));
+				}
+				if (!strcmp(next_tok, "-tos")) {
+					next_tok = strtok(NULL, " )\n");
+					insertTOSSpec(classifier, cname, gAtoi(next_tok));
 				}
 			}
-		}
-		else if (!strcmp(next_tok, "del"))
-		{
+		} else if (!strcmp(next_tok, "del")) {
 			next_tok = strtok(NULL, " \n");
-			if (next_tok != NULL)
-			{
+			if (next_tok != NULL) {
 				strcpy(cname, next_tok);
 				delClassDef(classifier, cname);
 			}
+		} else if (!strcmp(next_tok, "show")) {
+			printClassifier(classifier);
 		}
-		else if (!strcmp(next_tok, "show"))
-		  printClassifier(classifier);
 	}
 	return;
 }
