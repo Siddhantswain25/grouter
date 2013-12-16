@@ -1,4 +1,4 @@
-	#include <slack/std.h>
+#include <slack/std.h>
 #include <slack/map.h>
 #include <slack/list.h>
 #include <pthread.h>
@@ -36,6 +36,7 @@ void *weightedFairScheduler(void *pc)
 		savekey = NULL;
 		minftime = INFINITY;
 
+		// Pause until there are packets to be processed
 		pthread_mutex_lock(&(pcore->qlock));
 		if (pcore->packetcnt == 0)
 			pthread_cond_wait(&(pcore->schwaiting), &(pcore->qlock));
@@ -52,7 +53,8 @@ void *weightedFairScheduler(void *pc)
 				//printf("The queue %s is empty\n", nxtkey);
 				continue;
 			}
-			if ((nxtq->stime <= pcore->vclock) && (nxtq->ftime < minftime))
+			//if ((nxtq->stime <= pcore->vclock) && (nxtq->ftime < minftime))
+			if (nxtq->ftime < minftime)
 			{
 				savekey = nxtkey;
 				minftime = nxtq->ftime;
@@ -76,25 +78,26 @@ void *weightedFairScheduler(void *pc)
 			peekQueue(thisq, (void **)&nxt_pkt, &npktsize);
 			if (npktsize)
 			{
-				thisq->stime = thisq->ftime;
+				thisq->stime = minftime;
 				thisq->ftime = thisq->stime + npktsize/thisq->weight;
 			}
 
-			minstime = thisq->stime;
-			tweight = 0.0;
-		
-			keylst = map_keys(pcore->queues);
-			while (list_has_next(keylst) == 1)
-			{
-				nxtkey = list_next(keylst);
-				nxtq = map_get(pcore->queues, nxtkey);
-				tweight += nxtq->weight;
-				if ((nxtq->cursize > 0) && (nxtq->stime < minstime))
-					minstime = nxtq->stime;
-			}
-			list_release(keylst);
-			pcore->vclock = max(minstime, (pcore->vclock + ((double)pktsize)/tweight));
+//			minstime = thisq->stime;
+//			tweight = 0.0;
+//
+//			keylst = map_keys(pcore->queues);
+//			while (list_has_next(keylst) == 1)
+//			{
+//				nxtkey = list_next(keylst);
+//				nxtq = map_get(pcore->queues, nxtkey);
+//				tweight += nxtq->weight;
+//				if ((nxtq->cursize > 0) && (nxtq->stime < minstime))
+//					minstime = nxtq->stime;
+//			}
+//			list_release(keylst);
+//			pcore->vclock = max(minstime, (pcore->vclock + ((double)pktsize)/tweight));
 			// or should we just update the vclock by adding the length of the packet we just sent?
+			pcore->vclock = minftime;
 			printf("vclock is now %f\n", pcore->vclock);
 		}
 	}
@@ -130,26 +133,27 @@ int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *q
 	{
 		// If it's the first element we need to set the stime and ftime of this queue.
 		verbose(2, "[weightedFairQueuer]:: inserting the first element.. ");
-		thisq->stime = max(pcore->vclock, thisq->ftime);
+		thisq->stime = pcore->vclock;
 		//thisq->ftime = thisq->stime + pktsize/thisq->weight;
-		thisq->ftime = max(pcore->vclock, thisq->ftime) + pktsize/thisq->weight;
+		thisq->ftime = thisq->stime + pktsize/thisq->weight;
 
-		minstime = thisq->stime;
-
-		keylst = map_keys(pcore->queues);
+//		minstime = thisq->stime;
+//
+//		keylst = map_keys(pcore->queues);
+//
+//		while (list_has_next(keylst) == 1)
+//		{
+//			nxtkey = list_next(keylst);
+//
+//			nxtq = map_get(pcore->queues, nxtkey);
+//
+//			if ((nxtq->cursize > 0) && (nxtq->stime < minstime))
+//				minstime = nxtq->stime;
+//		}
+//		list_release(keylst);
+//
+//		pcore->vclock = max(minstime, pcore->vclock);
 		
-		while (list_has_next(keylst) == 1)
-		{
-			nxtkey = list_next(keylst);
-
-			nxtq = map_get(pcore->queues, nxtkey);
-			
-			if ((nxtq->cursize > 0) && (nxtq->stime < minstime))
-				minstime = nxtq->stime;
-		}
-		list_release(keylst);
-
-		pcore->vclock = max(minstime, pcore->vclock);
 		// insert the packet... and increment variables..
 		printf("Writing to queue\n");
 		writeQueue(thisq, in_pkt, pktsize);
@@ -162,13 +166,13 @@ int weightedFairQueuer(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize, char *q
 		return EXIT_SUCCESS;
 	} else if (thisq->cursize < thisq->maxsize)
 	{
-		// insert packet and setup variables..
 		printf("Writing to queue\n");
 		writeQueue(thisq, in_pkt, pktsize);
 		pcore->packetcnt++;
 		pthread_mutex_unlock(&(pcore->qlock));
 		return EXIT_SUCCESS;
 	} else {
+		// Should already be handled by packetcore
 		verbose(2, "[weightedFairQueuer]:: Packet dropped.. Queue for %s is full ", qkey);
 		pthread_mutex_unlock(&(pcore->qlock));
 		return EXIT_SUCCESS;

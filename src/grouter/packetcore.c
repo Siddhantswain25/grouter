@@ -412,7 +412,7 @@ char *tagPacket(pktcore_t *pcore, gpacket_t *in_pkt)
 }
 
 
-void enqueuePacket(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize)
+int enqueuePacket(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize)
 {
 	char *qkey;
 	simplequeue_t *thisq;
@@ -456,9 +456,9 @@ void enqueuePacket(pktcore_t *pcore, gpacket_t *in_pkt, int pktsize)
 		return EXIT_FAILURE;
 	}
 
-	pcore->packetcnt++;
-	if (pcore->packetcnt == 1)
-		pthread_cond_signal(&(pcore->schwaiting)); // wake up scheduler if it was waiting..
+//	pcore->packetcnt++;
+//	if (pcore->packetcnt == 1)
+//		pthread_cond_signal(&(pcore->schwaiting)); // wake up scheduler if it was waiting..
 	pthread_mutex_unlock(&(pcore->qlock));
 	verbose(2, "[enqueuePacket]:: Adding packet.. ");
 	weightedFairQueuer(pcore, in_pkt, pktsize, qkey);
